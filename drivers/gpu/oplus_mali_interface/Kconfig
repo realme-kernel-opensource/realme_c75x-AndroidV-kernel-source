@@ -1,0 +1,6 @@
+#change 'y' 'm' to 'n', if you want fo close this controller
+config OPLUS_FEATURE_POWERMODEL_GPU_INTERFACE
+    tristate "oplus gpu powermodel interface"
+    default m
+    help
+      define this config to control oplus gpu powermodel interface.

@@ -135,6 +135,7 @@
 			    8250.nr_uarts=4 \
 			    androidboot.hardware=mt6899 \
 			    vmalloc=400M swiotlb=noforce \
+			    log_buf_len=2m \
 			    firmware_class.path=/vendor/firmware \
 			    cgroup.memory=nosocket,nokmem \
 			    disable_dma32=on \
@@ -14270,6 +14271,14 @@ sw_info,frame_id,custom,pipeline_stage,RPID,UID";
 				mode-ddr-reserve = <BOOT_DDR_RSVD>;
 				mode-meta = <BOOT_META>;
 				mode-rpmbpk = <BOOT_RPMBPK>;
+				//#ifdef OPLUS_FEATURE_OEM_BOOT_MODE
+				mode-kernel = <BOOT_KERNEL>;
+				mode-silence = <BOOT_SILENCE>;
+				mode-sau = <BOOT_SAU>;
+				mode-sblmemtest = <BOOT_AGINGTEST>;
+				mode-ftm = <BOOT_FACTORY>;
+				mode-edl = <BOOT_EDL>;
+				//#endif
 			};
 		};
 
@@ -15428,7 +15437,12 @@ sw_info,frame_id,custom,pipeline_stage,RPID,UID";
 					//<15 0x10000 0x0>, /* aod */
 					<17 0x8000 0x0>, /* scp chre from */
 					<18 0x8000 0x0>, /* scp chre to */
-					<19 0x200 0x0>;  /* low power debug */
+					<19 0x200 0x0>,  /* low power debug */
+					/* #ifdef OPLUS_FEATURE_SENSOR_SMEM */
+					<26 0x100000  0x0>, /* sensor share memory*/
+					<27 0x11000 0x0>, /* sensor monitor*/
+					<28 0x10000 0x0>; /* pseudo sensor for data/fault inject*/
+					/* #endif OPLUS_FEATURE_SENSOR_SMEM */
 
 			scp-resource-dump = "enable";   /* enable dump scp related resource */
 			/* regulator */
@@ -16062,17 +16076,36 @@ sw_info,frame_id,custom,pipeline_stage,RPID,UID";
 			vib-supply = <&mt6368_vibr>;
 		};
 
-		keypad: kp@1c00e000 {
-			compatible = "mediatek,kp";
-			/*
-			 * factory key type
-			 * 0: Keypad IP key
-			 * 1: GPIO key
-			 * 2: HOME2 key
-			 */
-			mediatek,factory-key-type = <2>;
+		shell_front {
+			compatible = "oplus,shell-temp";
+		};
+
+		shell_frame {
+			compatible = "oplus,shell-temp";
+		};
+
+		shell_back {
+			compatible = "oplus,shell-temp";
 		};
 	};
+
+    /*OPLUS_FEATURE_key_DOWN*/
+	keypad: kp@1c00e000 {
+		compatible = "mediatek,kp";
+ 		reg = <0 0x1c00e000 0 0x1000>;
+		interrupts = <GIC_SPI 132 IRQ_TYPE_EDGE_RISING 0>;
+		mediatek,key-debounce-ms = <1024>;
+		mediatek,hw-map-num = <72>;
+		mediatek,hw-init-map = <114 0 0 0 0 0 0 0 0 0 0 0 0
+					0 0 0 0 0 0 0 0 0 0 0 0 0 0
+					0 0 0 0 0 0 0 0 0 0 0 0 0 0
+					0 0 0 0 0 0 0 0 0 0 0 0 0 0
+					0 0 0 0 0 0 0 0 0 0 0 0 0 0
+					0 0 0>;
+		clocks = <&clk26m>;
+		clock-names = "kpd";
+	};
+	/*OPLUS_FEATURE_key_DOWN*/
 
 	snd_scp_ultra: snd-scp-ultra {
 		compatible = "mediatek,snd-scp-ultra";
@@ -16522,6 +16555,15 @@ sw_info,frame_id,custom,pipeline_stage,RPID,UID";
 		bootmode = <&chosen>;
 	};
 
+	//#ifdef OPLUS_FEATURE_SECURITY_COMMON
+	oplus_secure_common:oplus_secure_common {
+		compatible = "oplus,secure_common";
+		oplus,sec_reg_num = <0>;
+		oplus,sec_en_anti_reg = <0>;
+		oplus,sec_override1_reg = <0>;
+		oplus,override1_en_value = <0>;
+	};
+	//#endif  /* OPLUS_FEATURE_SECURITY_COMMON */
 
 	lk_charger: lk-charger {
 		compatible = "mediatek,lk_charger";
@@ -17317,6 +17359,33 @@ sw_info,frame_id,custom,pipeline_stage,RPID,UID";
 	};
 };
 
+//#ifdef OPLUS_FEATURE_SECURITY_COMMON
+//&mtkheap_page_svp {
+//	status = "ok";
+//};
+
+//&mtkheap_page_wfd {
+//	status = "ok";
+//};
+
+//&mtkheap_region_svp {
+//	status = "ok";
+//};
+
+//&mtkheap_region_wfd {
+//	status = "ok";
+//};
+
+&mtee_svp {
+	mtee: MTEE {
+		compatible = "mediatek,mtk_svp_on_mtee_support";
+	};
+//	svp: SecureVideoPath {
+//		compatible = "mediatek,mtk_sec_video_path_support";
+//	};
+};
+//#endif /* OPLUS_FEATURE_SECURITY_COMMON */
+
 &hypervisor {
 	status = "okay";
 };
@@ -17724,7 +17793,6 @@ sw_info,frame_id,custom,pipeline_stage,RPID,UID";
 /delete-node/ &mt6363_vbuck2_sshub;
 /delete-node/ &mt6363_vbuck4_sshub;
 /delete-node/ &mt6368_vmch_eint_low;
-/delete-node/ &mt6368_vmch;
 
 &main_pmic {
 	pmic-lvsys-notify {

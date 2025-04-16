@@ -37,6 +37,16 @@
 #if IS_ENABLED(CONFIG_MTK_AUDIODSP_SUPPORT)
 #include "mtk-afe-external.h"
 #endif
+#ifdef OPLUS_TRACKPOINT_REPORT
+#include "oplus_display_trackpoint_report.h"
+#endif
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+#include "oplus_display_onscreenfingerprint.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+#ifdef OPLUS_FEATURE_DISPLAY_APOLLO
+extern int mutex_sof_ns;
+#endif /* OPLUS_FEATURE_DISPLAY_APOLLO */
 
 #define DISPSYS0	0
 #define DISPSYS1	1
@@ -26769,6 +26779,8 @@ void mtk_gce_event_config_MT6991(struct drm_device *drm)
 		priv->side_config_regs + MT6991_DISP1_GCE_FRAME_DONE_SEL4);
 	writel(MT6991_DISP1_GCE_FRAME_DONE_SEL5_WDMA3_FRAME_DONE,
 		priv->side_config_regs + MT6991_DISP1_GCE_FRAME_DONE_SEL5);
+	writel(MT6991_DISP1_GCE_FRAME_DONE_SEL7_WDMA4_FRAME_DONE,
+		priv->side_config_regs + MT6991_DISP1_GCE_FRAME_DONE_SEL7);
 
 #if IS_ENABLED(CONFIG_DRM_MEDIATEK_AUTO)
 	writel(MT6991_DISP1_GCE_FRAME_DONE_SEL6_DSI2_FRAME_DONE,
@@ -26778,7 +26790,7 @@ void mtk_gce_event_config_MT6991(struct drm_device *drm)
 			off <= MT6991_DISP1_GCE_FRAME_DONE_SEL15; off += 0x4)
 		writel(~0, priv->side_config_regs + off);
 #else
-	for (off = MT6991_DISP1_GCE_FRAME_DONE_SEL6;
+	for (off = MT6991_DISP1_GCE_FRAME_DONE_SEL8;
 			off <= MT6991_DISP1_GCE_FRAME_DONE_SEL15; off += 0x4)
 		writel(~0, priv->side_config_regs + off);
 
@@ -31492,6 +31504,11 @@ void mtk_disp_mutex_src_set(struct mtk_drm_crtc *mtk_crtc, bool is_cmd_mode)
 					ddp->data->mutex_sof[val],
 					ddp->ovlsys1_regs +
 					DISP_REG_MUTEX_SOF(ddp->data, mutex->id));
+			if (priv->data->mmsys_id == MMSYS_MT6991) {
+				writel_relaxed(
+					MT6991_MUTEX_EOF_DSI0,
+					ddp->side_regs + DISP_REG_MUTEX_SOF(ddp->data, mutex->id));
+			}
 			if (priv->data->mmsys_id == MMSYS_MT6899) {
 				writel_relaxed(
 					MT6899_MUTEX_EOF_DSI0,
@@ -32328,8 +32345,10 @@ static irqreturn_t mtk_disp_mutex_irq_handler(int irq, void *dev_id)
 			DDPIRQ("[IRQ] mutex%d sof!\n", m_id);
 			DRM_MMP_EVENT_START(drm, 0, 0);
 			DRM_MMP_MARK(mutex[m_id], val, 0);
-			if (m_id == 0)
+			if (m_id == 0) {
 				drm_trace_tag_mark("mutex0_sof");
+				DRM_MMP_EVENT_START(drm, 0, 0);
+			}
 
 			if (priv && (priv->data->mmsys_id == MMSYS_MT6991
 				|| priv->data->mmsys_id == MMSYS_MT6989
@@ -32344,6 +32363,21 @@ static irqreturn_t mtk_disp_mutex_irq_handler(int irq, void *dev_id)
 					}
 				}
 			}
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+				if (oplus_ofp_is_supported()) {
+					if (oplus_ofp_video_mode_aod_fod_is_enabled()) {
+						oplus_ofp_pressed_icon_status_update(OPLUS_OFP_TE_RDY);
+						/* send ui ready */
+						oplus_ofp_notify_uiready(mtk_crtc0);
+					}
+				}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
+#ifdef OPLUS_FEATURE_DISPLAY_APOLLO
+				mutex_sof_ns = ktime_get();
+#endif /* OPLUS_FEATURE_DISPLAY_APOLLO */
+
 			if(mtk_crtc0 && atomic_read(&mtk_crtc0->get_data_type)) {
 				temp = mtk_spr_check_postalign_status(mtk_crtc0);
 				if(temp >= 0)
@@ -38528,6 +38562,9 @@ SKIP_OVLSYS_CONFIG:
 					__func__, __LINE__,
 					irq, ret);
 			return ret;
+#ifdef OPLUS_TRACKPOINT_REPORT
+		display_exception_trackpoint_report("DisplayDriverID@@504$$ mtk_ddp_probe failed to request irq:%d ret:%d", irq, ret);
+#endif
 		}
 	}
 

@@ -26,6 +26,10 @@
 
 #define mtktscharger_TEMP_CRIT (150000) /* 150.000 degree Celsius */
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define MAIN_CHARGER 0
+#endif
+
 #define mtktscharger_dprintk(fmt, args...) \
 do { \
 	if (mtktscharger_debug_log) \
@@ -87,6 +91,19 @@ static int polling_factor1 = 5000;
 static int polling_factor2 = 10000;
 static int charger_type;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if (defined(CONFIG_OPLUS_CHARGER_MTK6877) || defined(CONFIG_OPLUS_CHARGER_MTK6833))
+static struct charger_consumer *pthermal_consumer;
+#endif
+
+#if (defined(CONFIG_OPLUS_CHARGER_MTK6877) || defined(CONFIG_OPLUS_CHARGER_MTK6833))
+extern struct charger_consumer *charger_manager_get_by_name(struct device *dev,
+	const char *supply_name);
+extern int charger_manager_get_charger_temperature(struct charger_consumer *consumer,
+	int idx, int *tchg_min, int *tchg_max);
+#endif
+#endif
+
 /*return 0:single charger*/
 /*return 1,2:dual charger*/
 static int get_charger_type(void)
@@ -129,13 +146,41 @@ static int mtktscharger_get_hw_temp(void)
 {
 	int ret = -1;
 	int t = -127000;
-	union power_supply_propval prop;
 	struct power_supply *chg_psy;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if (defined(CONFIG_OPLUS_CHARGER_MTK6877) || defined(CONFIG_OPLUS_CHARGER_MTK6833))
+	int tmax = 0, tmin = 0;
+	int charger_idx = MAIN_CHARGER;
+#else
+	union power_supply_propval prop;
+#endif
+#else
+	union power_supply_propval prop;
+#endif
 
 	chg_psy = get_charger_psy();
 
 	if (chg_psy == NULL)
 		return t;
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if (defined(CONFIG_OPLUS_CHARGER_MTK6877) || defined(CONFIG_OPLUS_CHARGER_MTK6833))
+	if(!pthermal_consumer){
+		pr_err("%s get_by_name fails.\n",__func__);
+		return -EPERM;
+	}
+	ret = charger_manager_get_charger_temperature(pthermal_consumer, charger_idx, &tmin, &tmax);
+	if (ret >= 0) {
+		t = tmax * 1000;
+		prev_temp = t;
+	} else if (ret == -ENODEV) {
+	} else {
+		t=prev_temp;
+	}
+
+	mtktscharger_dprintk("%s t=%d min=%d max=%d ret=%d\n",
+		__func__, t, tmin, tmax, ret);
+#else
 	ret = power_supply_get_property(chg_psy,
 			POWER_SUPPLY_PROP_TEMP, &prop);
 	if (ret == 0) {
@@ -145,6 +190,18 @@ static int mtktscharger_get_hw_temp(void)
 		t = prev_temp;
 	mtktscharger_dprintk("%s t=%d ret=%d\n",
 		__func__, t, ret);
+#endif
+#else
+	ret = power_supply_get_property(chg_psy,
+			POWER_SUPPLY_PROP_TEMP, &prop);
+	if (ret == 0) {
+		t = 100 * prop.intval;
+		prev_temp = t;
+	} else
+		t = prev_temp;
+	mtktscharger_dprintk("%s t=%d ret=%d\n",
+		__func__, t, ret);
+#endif
 
 	return t;
 }
@@ -545,6 +602,17 @@ static int mtktscharger_pdrv_probe(struct platform_device *pdev)
 
 	mtktscharger_dprintk_always("%s\n", __func__);
 	charger_type = get_charger_type();
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if (defined(CONFIG_OPLUS_CHARGER_MTK6877) || defined(CONFIG_OPLUS_CHARGER_MTK6833))
+	pthermal_consumer = charger_manager_get_by_name(&pdev->dev, "charger");
+
+	if (!pthermal_consumer) {
+		mtktscharger_pr_notice("%s get get_by_name fails.\n", __func__);
+		return -EPERM;
+	}
+#endif
+#endif
 
 	for (i = 0; i < num_trip; i++) {
 		trips[i].temperature = trip_temp[i];

@@ -37,7 +37,9 @@
 #include "mtk_pbm.h" /* DLPT */
 #include "mtk_peak_power_budget.h"
 #endif
-
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
+#define OPLUS_FEATURE_CAMERA_COMMON
+#endif /* OPLUS_FEATURE_CAMERA_COMMON */
 
 /******************************************************************************
  * Definition
@@ -65,6 +67,20 @@ static int pt_strict; /* always be zero in C standard */
 #endif
 
 static int pt_is_low(int pt_low_vol, int pt_low_bat, int pt_over_cur);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <soc/oplus/system/oplus_project.h>
+extern const struct flashlight_device_id flashlight_id_dual[];
+extern const struct flashlight_device_id flashlight_id_single[];
+extern const struct flashlight_device_id flashlight_id_aladdin[];
+extern const struct flashlight_device_id flashlight_id_atom[];
+extern const struct flashlight_device_id flashlight_id_ark[];
+extern const struct flashlight_device_id flashlight_id_sy6560[];
+extern const struct flashlight_device_id flashlight_id_orisa[];
+extern const struct flashlight_device_id flashlight_id_orisc[];
+extern const struct flashlight_device_id flashlight_id_miami[];
+const struct flashlight_device_id *flashlight_id;
+int flashlight_device_num = 0;
+#endif
 #endif
 
 /******************************************************************************
@@ -274,6 +290,33 @@ int flashlight_get_part_index(int part_id)
 }
 EXPORT_SYMBOL(flashlight_get_part_index);
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+static int select_lednum(struct flashlight_dev *fdev, int lednum)
+{
+	struct flashlight_dev_arg fl_dev_arg;
+	if (!fdev || !fdev->ops) {
+		pr_info("Failed with no flashlight ops\n");
+		return -EINVAL;
+	}
+
+	if (fdev->sw_disable_status == FLASHLIGHT_SW_DISABLE_ON) {
+		pr_info("Sw disable on\n");
+		return 0;
+	}
+
+	fl_dev_arg.channel = fdev->dev_id.channel;
+	fl_dev_arg.arg = lednum;
+
+	if (fdev->ops->flashlight_ioctl(OPLUS_FLASH_IOC_SELECT_LED_NUM,
+				(unsigned long)&fl_dev_arg)) {
+		pr_info("Failed to select led nums \n");
+		return -EFAULT;
+	}
+
+	fdev->enable = 1;
+	return 0;
+}
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 
 /******************************************************************************
  * Flashlight devices
@@ -340,6 +383,61 @@ int flashlight_dev_register(
 	struct flashlight_dev *fdev;
 	int type_index, ct_index, part_index;
 	int i;
+
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (is_project(19537) || is_project(19538) ||
+		is_project(19539) || is_project(19536) ||
+		is_project(19541) || is_project(20291) ||
+		is_project(20292) || is_project(20293) ||
+		is_project(20294) || is_project(20295) ||
+		is_project(22693) || is_project(22694) || is_project(22612) || is_project(0x226B1) ||
+		is_project(22277) || is_project(23031) || is_project(23231) || is_project(23051) ||
+		is_project(23243) || is_project(23241) || is_project(23035) || is_project(23321)) {
+		flashlight_id = flashlight_id_single;
+		flashlight_device_num = 1;
+	} else {
+		flashlight_id = flashlight_id_dual;
+		flashlight_device_num = 2;
+	}
+
+	if (is_project(24700) || is_project(24701) || is_project(24702) || is_project(24709)) {
+		pr_info("set flashlight id orisa\n");
+		flashlight_id = flashlight_id_orisc;
+		flashlight_device_num = 1;
+	}
+
+	if (is_project(24713) || is_project(24715) || is_project(24714) || is_project(24728)) {
+		pr_info("set flashlight id orisa\n");
+		flashlight_id = flashlight_id_orisa;
+		flashlight_device_num = 1;
+	}
+	if (is_project(0x226AD) || is_project(0x226AE) || is_project(0x226AF)){
+		pr_err("miami set flashlightid\n");
+		flashlight_id = flashlight_id_miami;
+		flashlight_device_num = 1;
+	}
+
+	if (is_project(22351) || is_project(22352) || is_project(22353) || is_project(22368)
+		|| is_project(22361) || is_project(22362) || is_project(22363) || is_project(22364)) {
+		flashlight_id = flashlight_id_aladdin;
+		flashlight_device_num = 1;
+		pr_info("set flashlight id %s\n", name);
+		if (is_project(22368) && strncmp(name, flashlight_id[flashlight_device_num - 1].name,
+			FLASHLIGHT_NAME_SIZE)) {
+			pr_info("set flashlight id sy6560\n");
+			flashlight_id = flashlight_id_sy6560;
+			flashlight_device_num = 1;
+		}
+	}
+	else if (is_project(22365) || is_project(22366) || is_project(22367)) {
+		flashlight_id = flashlight_id_atom;
+		flashlight_device_num = 1;
+	}
+	else if (is_project(23702) || is_project(23703) || is_project(23704) || is_project(23618)) {
+		flashlight_id = flashlight_id_ark;
+		flashlight_device_num = 1;
+	}
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 
 	for (i = 0; i < flashlight_device_num; i++) {
 		if (!strncmp(name, flashlight_id[i].name,
@@ -508,7 +606,6 @@ ssize_t strobe_VDIrq(void)
 }
 EXPORT_SYMBOL(strobe_VDIrq);
 
-
 /******************************************************************************
  * Charger Status
  *****************************************************************************/
@@ -523,9 +620,16 @@ static int flashlight_update_charger_status(struct flashlight_dev *fdev)
 
 	/* ioctl */
 	fl_dev_arg.channel = fdev->dev_id.channel;
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	fl_dev_arg.arg = fdev->charger_status;
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 	if (fdev->ops->flashlight_ioctl(FLASH_IOC_IS_CHARGER_READY,
 				(unsigned long)&fl_dev_arg))
 		pr_info("Failed to get charger status\n");
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	else if (fl_dev_arg.arg == 2)
+		fdev->charger_status = FLASHLIGHT_CHARGER_READY;
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 	else
 		fdev->charger_status = fl_dev_arg.arg;
 
@@ -782,10 +886,12 @@ static long _flashlight_ioctl(
 	case FLASH_IOC_IS_LOW_POWER:
 		fl_arg.arg = 0;
 #ifdef CONFIG_MTK_FLASHLIGHT_PT
+	#ifndef OPLUS_FEATURE_CAMERA_COMMON
 		fl_arg.arg = pt_is_low(pt_low_vol, pt_low_bat, pt_over_cur);
 		if (fl_arg.arg)
 			pr_debug("Pt status: (%d,%d,%d)\n",
 					pt_low_vol, pt_low_bat, pt_over_cur);
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 #endif
 		if (copy_to_user((void __user *)arg, (void *)&fl_arg,
 					sizeof(struct flashlight_user_arg))) {
@@ -812,6 +918,9 @@ static long _flashlight_ioctl(
 
 	case FLASH_IOC_IS_CHARGER_READY:
 		mutex_lock(&fl_mutex);
+		#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		fdev->charger_status = fl_arg.arg;
+		#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 		flashlight_update_charger_status(fdev);
 		mutex_unlock(&fl_mutex);
 		fl_arg.arg = fdev->charger_status;
@@ -918,6 +1027,16 @@ static long _flashlight_ioctl(
 			return -ENOTTY;
 		}
 		break;
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	case OPLUS_FLASH_IOC_SELECT_LED_NUM:
+		pr_info("OPLUS_FLASH_IOC_SELECT_LED_NUM(%d,%d,%d): %d\n",
+				type, ct, part, fl_arg.arg);
+		mutex_lock(&fl_mutex);
+		ret = select_lednum(fdev, fl_arg.arg);
+		mutex_unlock(&fl_mutex);
+		break;
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 
 	default:
 		if (fdev->ops)
@@ -2058,10 +2177,12 @@ static int __init flashlight_init(void)
 	}
 
 #ifdef CONFIG_MTK_FLASHLIGHT_PT
+	#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	register_low_battery_notify(
 			&pt_low_vol_callback, LOW_BATTERY_PRIO_FLASHLIGHT, NULL);
 	register_bp_thl_notify(
 			&pt_low_bat_callback, BATTERY_PERCENT_PRIO_FLASHLIGHT);
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 	register_battery_oc_notify(
 			&pt_oc_callback, BATTERY_OC_PRIO_FLASHLIGHT, NULL);
 #endif

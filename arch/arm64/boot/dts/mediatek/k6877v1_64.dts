@@ -9,6 +9,14 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/pinctrl/mt6877-pinfunc.h>
 
+/* Trustonic Mobilecore real driver */
+/* #ifdef OPLUS_FEATURE_SECURITY_COMMON */
+&mobicore{
+     trustonic,real-drv = <1>;
+     trustonic,sel2-support = <0>;
+};
+/* #endif OPLUS_FEATURE_SECURITY_COMMON */
+
 /* chosen */
 &chosen {
 	atag,videolfb-fb_base_l = <0x7e605000>;
@@ -165,6 +173,7 @@
 	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
+/*
 	panel1@0 {
 		compatible = "truly,ft8756,vdo";
 		reg = <0>;
@@ -208,6 +217,7 @@
 			};
 		};
 	};
+*/
 };
 
 &mtk_leds {
@@ -251,12 +261,14 @@
 		data = <1>;
 		pwm_config = <0 0 0 0 0>;
 	};
+/*
 	led6:led@6 {
 		compatible = "mediatek,lcd-backlight";
 		led_mode = <6>;
 		data = <1>;
 		led_config = <8 11>;
 	};
+*/
 	vibrator0:vibrator@0 {
 		compatible = "mediatek,vibrator";
 		vib_timer = <25>;
@@ -418,7 +430,11 @@
 		compatible = "richtek,rt5512";
 		#sound-dai-cells = <0>;
 		reg = <0x5c>;
-		status = "okay";
+//#ifdef OPLUS_FEATURE_AUDIODRIVER
+		status = "disable";
+//#else
+//		status = "okay";
+//#endif
 		sound-name-prefix = "Left";
 	};
 };
@@ -430,8 +446,8 @@
 	};
 };
 
-#include "k6877v1_64/cust.dtsi"
-#include "mediatek/cust_mt6877_touch_1080x2300.dtsi"
-#include "mediatek/cust_mt6877_camera.dtsi"
+//#include "k6877v1_64/cust.dtsi"
+//#include "mediatek/cust_mt6877_touch_1080x2300.dtsi"
+//#include "mediatek/cust_mt6877_camera.dtsi"
 /*End of this file, DO NOT ADD ANYTHING HERE*/
 

@@ -2080,6 +2080,11 @@ static int __init thermal_monitor_init(void)
 		mt6359vgpu_init();
 		mt6359tsx_init();
 		mt6359dcxo_init();
+		mtk_AP_init();
+		mtk_PA_4G_init();
+		mtk_PA_5G_init();
+		mtk_charger_ts_init();
+		mtk_sub_bat_init();
 		mtkts_btsnrpa_init();
 		mtktsbattery_init();
 		mtkts_bts_init();
@@ -2091,6 +2096,7 @@ static int __init thermal_monitor_init(void)
 		mtkts_dctm_init();
 		wmt_tm_init();
 		tsallts_init();
+		//mtk_tscharger_init();
 		return 0;
 }
 
@@ -2123,16 +2129,23 @@ static void __exit thermal_monitor_exit(void)
 	mt6359vgpu_exit();
 	mt6359tsx_exit();
 	mt6359dcxo_exit();
+	mtk_AP_exit();
+	mtk_PA_4G_exit();
+	mtk_PA_5G_exit();
+	mtk_charger_ts_exit();
+	mtk_sub_bat_exit();
 	mtkts_btsnrpa_exit();
 	mtktsbattery_exit();
 	mtkts_bts_exit();
 	mtkts_btsmdpa_exit();
+	mtktspa_exit();
 	mtk_mdm_txpwr_exit();
 	mtktscharger_exit();
 	mtk_imgs_exit();
 	mtkts_dctm_exit();
 	wmt_tm_deinit();
 	tsallts_exit();
+	//mtk_tscharger_exit();
 }
 
 

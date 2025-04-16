@@ -18,6 +18,9 @@
 
 #define DISP_REG_OVL_DL_OUT_RELAY0_SIZE 0x26C
 
+#define MT6991_DISP_REG_OVL_DLO_ASYNC0_STATUS0		0x380
+#define MT6991_DISP_REG_DISP_DLO_ASYNC0_STATUS0 	0x290
+
 /**
  * struct mtk_disp_dlo_async - DISP_RSZ driver structure
  * @ddp_comp - structure containing type enum and hardware resources
@@ -54,9 +57,59 @@ static void mtk_dlo_async_addon_config(struct mtk_ddp_comp *comp,
 	}
 }
 
+static void mtk_dlo_async_dump_mt6991(struct mtk_ddp_comp *comp)
+{
+	struct mtk_drm_crtc *mtk_crtc = comp->mtk_crtc;
+	void __iomem *baddr = 0;
+	resource_size_t regs_pa = 0;
+	int off = 0, idx = 0, k;
+
+	if (mtk_crtc) {
+		if ((comp->id >= DDP_COMPONENT_OVLSYS_DLO_ASYNC0) &&
+			(comp->id <= DDP_COMPONENT_OVLSYS_DLO_ASYNC12)) {
+			regs_pa = mtk_crtc->ovlsys0_regs_pa;
+			baddr = mtk_crtc->ovlsys0_regs;
+			off = MT6991_DISP_REG_OVL_DLO_ASYNC0_STATUS0;
+			idx = comp->id - DDP_COMPONENT_OVLSYS_DLO_ASYNC0;
+		} else if ((comp->id >= DDP_COMPONENT_OVLSYS1_DLO_ASYNC0) &&
+			(comp->id <= DDP_COMPONENT_OVLSYS1_DLO_ASYNC12)) {
+			regs_pa = mtk_crtc->ovlsys1_regs_pa;
+			baddr = mtk_crtc->ovlsys1_regs;
+			off = MT6991_DISP_REG_OVL_DLO_ASYNC0_STATUS0;
+			idx = comp->id - DDP_COMPONENT_OVLSYS1_DLO_ASYNC0;
+		}
+		else if ((comp->id >= DDP_COMPONENT_DLO_ASYNC0) &&
+			(comp->id <= DDP_COMPONENT_DLO_ASYNC7)) {
+			regs_pa = mtk_crtc->config_regs_pa;
+			baddr = mtk_crtc->config_regs;
+			off = MT6991_DISP_REG_DISP_DLO_ASYNC0_STATUS0;
+			idx = comp->id - DDP_COMPONENT_DLO_ASYNC0;
+		}
+	}
+
+	if (!baddr) {
+		DDPDUMP("%s, %s is NULL!\n", __func__, mtk_dump_comp_str(comp));
+		return;
+	}
+
+	DDPDUMP("== DISP %s REGS:0x%pa ==\n", mtk_dump_comp_str(comp), &regs_pa);
+	k = off + (idx * 0x8);
+	DDPDUMP("0x%04x: 0x%08x 0x%08x\n", k,
+		readl(baddr + k), readl(baddr + k + 0x4));
+}
+
 void mtk_dlo_async_dump(struct mtk_ddp_comp *comp)
 {
 	void __iomem *baddr = comp->regs;
+	struct mtk_drm_crtc *mtk_crtc = comp->mtk_crtc;
+	struct mtk_drm_private *priv = NULL;
+
+	priv = mtk_crtc->base.dev->dev_private;
+
+	if (priv && priv->data && priv->data->mmsys_id == MMSYS_MT6991) {
+		mtk_dlo_async_dump_mt6991(comp);
+		return;
+	}
 
 	if (!baddr) {
 		DDPDUMP("%s, %s is NULL!\n", __func__, mtk_dump_comp_str(comp));

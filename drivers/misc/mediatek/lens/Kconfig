@@ -321,3 +321,67 @@ config MTK_LENS_WV511AAF_SUPPORT
 	  This config is used to enable the corresponding
 	  lens driver for the camera sensor module
 	  Set as y if the driver is used in this project
+
+
+config MTK_LENS_AK7316MAF_SUPPORT
+	tristate "AK7316MAF Lens Driver"
+        depends on MTK_LENS
+	help
+	  AK7316MAF Lens Driver
+	  This config is used to enable the corresponding
+	  lens driver for the camera sensor module
+	  Set as y if the driver is used in this project
+
+config MTK_LENS_AK7316TAF_SUPPORT
+	tristate "AK7316TAF Lens Driver"
+        depends on MTK_LENS
+	help
+	  AK7316TAF Lens Driver
+	  This config is used to enable the corresponding
+	  lens driver for the camera sensor module
+	  Set as y if the driver is used in this project
+
+config MTK_LENS_JD5516WAF_SUPPORT
+	tristate "JD5516WAF Lens Driver"
+        depends on MTK_LENS
+	help
+	  JD5516WAF Lens Driver
+	  This config is used to enable the corresponding
+	  lens driver for the camera sensor module
+	  Set as y if the driver is used in this project
+
+config MTK_LENS_AK7377MAF_SUPPORT
+	tristate "AK7377MAF Lens Driver"
+        depends on MTK_LENS
+	help
+	  AK7316MAF Lens Driver
+	  This config is used to enable the corresponding
+	  lens driver for the camera sensor module
+	  Set as y if the driver is used in this project
+
+config MTK_LENS_AW8601_SUPPORT
+	tristate "AW8601 Lens Driver"
+        depends on MTK_LENS
+	help
+	  AW8601 Lens Driver
+	  This config is used to enable the corresponding
+	  lens driver for the camera sensor module
+	  Set as y if the driver is used in this project
+
+config MTK_LENS_FP5513E4AF_SUPPORT
+	tristate "FP5513E4AF Lens Driver"
+        depends on MTK_LENS
+	help
+	  FM50AF Lens Driver
+	  This config is used to enable the corresponding
+	  lens driver for the camera sensor module
+	  Set as y if the driver is used in this projec
+
+config MTK_LENS_AK7316T33AF_SUPPORT
+	tristate "AK7316T33AF Lens Driver"
+        depends on MTK_LENS
+	help
+	  AK7316T33AF Lens Driver
+	  This config is used to enable the corresponding
+	  lens driver for the camera sensor module
+	  Set as y if the driver is used in this project

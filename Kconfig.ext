@@ -42,6 +42,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/pinctrl/mediatek/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/power/supply/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/power/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/rtc/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/remoteproc/Kconfig"
@@ -112,9 +114,35 @@ source "$(KCONFIG_EXT_PREFIX)drivers/pinctrl/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/media/platform/mtk-isp/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/oplus_mm_fb/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/boot/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/boot/oplus_projectinfo/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/boot/cmdline_parser/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/boot/oplus_custom/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)fs/f2fs/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)arch/arm/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/device_info/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/storage/common/ufs_oplus_dbg/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/base/kernelFwUpdate/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/oplus/oplus_gpio/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/base/touchpanel_notify/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/oplus/vibrator/aw8697_haptic/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/oplus/sim_detect/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/input/fingerprint/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/hypervisor/guest/Kconfig"
 
@@ -122,4 +150,93 @@ source "$(KCONFIG_EXT_PREFIX)drivers/hypervisor/host/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/hypervisor/nebula/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/oplus_inject/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/oplus/cs_press/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/dft/common/olc/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/dft/common/feedback/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/storage/common/io_metrics/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)/drivers/video/backlight/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)kernel/oplus_cpu/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/base/magtransfer/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/storage/common/storage_log/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/storage/common/oplus_uprobe/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/storage/common/oplus_f2fslog_storage/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/storage/common/wq_dynamic_priority/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/pmic_ldo_set/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_sensor_devinfo/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_consumer_ir/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/platform/sensor_cmd/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/platform/sensor_device/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/platform/sensor_event/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/lux_aodhub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/fp_displayhub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/pickup_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/back_tap_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/gpu/oplus_mali_interface/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/pedo_minutehub/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/aw37004/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/phone_proxhub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/gesture_proxhub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/ambiente_proxhub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/lay_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/palm_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/oplus_activity_recognitionhub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/elevator_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_sensor_devinfo/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/platform/sensor_cmd/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/platform/sensor_device/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/platform/sensor_event/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/sensors/lux_aodhub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/sensors/fp_displayhub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/sensors/pickup_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/sensors/palm_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/sensors/back_tap_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/back_tap_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/2.0/oplus_virtual_sensor/sensors/rotation_detecthub/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/sensor/1.0/oplus_virtual_sensor/sensors/pedo_minutehub/Kconfig"

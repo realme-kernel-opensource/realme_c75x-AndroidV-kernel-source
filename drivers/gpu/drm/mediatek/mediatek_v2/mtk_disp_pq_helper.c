@@ -335,6 +335,7 @@ static void frame_cmdq_cb(struct cmdq_cb_data data)
 	struct pq_common_data *pq_data = mtk_crtc->pq_data;
 	int index = drm_crtc_index(crtc);
 
+	mtk_drm_trace_begin("pq_cmdq_cb");
 	if (need_wait_done) {
 		atomic_set(&pq_data->cfg_done, 1);
 		wake_up_interruptible(&pq_data->cfg_done_wq);
@@ -343,6 +344,7 @@ static void frame_cmdq_cb(struct cmdq_cb_data data)
 	}
 	cmdq_pkt_destroy(cb_data->cmdq_handle);
 	kfree(cb_data);
+	mtk_drm_trace_end();
 }
 
 int disp_pq_proxy_virtual_hw_write(struct drm_crtc *crtc, void *data)
@@ -364,8 +366,7 @@ int disp_pq_proxy_virtual_hw_write(struct drm_crtc *crtc, void *data)
 		DDPPR_ERR("%s:%d NULL cmdq handle\n", __func__, __LINE__);
 		return -EFAULT;
 	}
-	mtk_vidle_user_power_keep_by_gce(DISP_VIDLE_USER_DISP_CMDQ, cmdq_handle,
-			mtk_get_gpr(mtk_crtc, cmdq_handle));
+	mtk_vidle_user_power_keep_by_gce(DISP_VIDLE_USER_DISP_CMDQ, cmdq_handle, 0);
 	if (mtk_crtc_with_sub_path(crtc, mtk_crtc->ddp_mode))
 		mtk_crtc_wait_frame_done(mtk_crtc, cmdq_handle, DDP_SECOND_PATH, 0);
 	else
@@ -711,8 +712,7 @@ int disp_pq_helper_frame_config(struct drm_crtc *crtc, struct cmdq_pkt *cmdq_han
 			mtk_drm_trace_end();
 			return -1;
 		}
-		mtk_vidle_user_power_keep_by_gce(DISP_VIDLE_USER_DISP_CMDQ, pq_cmdq_handle,
-				mtk_get_gpr(mtk_crtc, pq_cmdq_handle));
+		mtk_vidle_user_power_keep_by_gce(DISP_VIDLE_USER_DISP_CMDQ, pq_cmdq_handle, 0);
 		if (mtk_crtc_with_sub_path(crtc, mtk_crtc->ddp_mode))
 			mtk_crtc_wait_frame_done(mtk_crtc, pq_cmdq_handle,
 				DDP_SECOND_PATH, 0);
@@ -1098,8 +1098,7 @@ int disp_pq_proxy_virtual_relay_engines(struct drm_crtc *crtc, void *data)
 		DDPPR_ERR("%s:%d NULL cmdq handle\n", __func__, __LINE__);
 		return -EFAULT;
 	}
-	mtk_vidle_user_power_keep_by_gce(DISP_VIDLE_USER_DISP_CMDQ, cmdq_handle,
-			mtk_get_gpr(mtk_crtc, cmdq_handle));
+	mtk_vidle_user_power_keep_by_gce(DISP_VIDLE_USER_DISP_CMDQ, cmdq_handle, 0);
 	if (mtk_crtc_with_sub_path(crtc, mtk_crtc->ddp_mode))
 		mtk_crtc_wait_frame_done(mtk_crtc, cmdq_handle, DDP_SECOND_PATH, 0);
 	else

@@ -19,6 +19,10 @@
 #define DISP_REG_OVL_DL_IN_RELAY0_SIZE 0x260
 #define DISP_REG_OVL_DL_IN_RELAY1_SIZE 0x264
 
+#define MT6991_DISP_REG_OVL_DLI_ASYNC0_STATUS0		0x300
+#define MT6991_DISP_REG_DISP_DLI_ASYNC0_STATUS0 	0x2D8
+#define MT6991_DISP_REG_DISP_DLI_ASYNC20_STATUS0	0x234
+
 /**
  * struct mtk_disp_dli_async - DISP_RSZ driver structure
  * @ddp_comp - structure containing type enum and hardware resources
@@ -73,17 +77,48 @@ static void mtk_dli_async_addon_config(struct mtk_ddp_comp *comp,
 
 void mtk_dli_async_dump_mt6991(struct mtk_ddp_comp *comp)
 {
-	void __iomem *baddr = comp->regs;
+	struct mtk_drm_crtc *mtk_crtc = comp->mtk_crtc;
+	void __iomem *baddr = 0;
+	resource_size_t regs_pa = 0;
+	int off = 0, idx = 0, k;
+
+	if (mtk_crtc) {
+		if ((comp->id >= DDP_COMPONENT_OVLSYS_DLI_ASYNC0) &&
+			(comp->id <= DDP_COMPONENT_OVLSYS_DLI_ASYNC5)) {
+			regs_pa = mtk_crtc->ovlsys0_regs_pa;
+			baddr = mtk_crtc->ovlsys0_regs;
+			off = MT6991_DISP_REG_OVL_DLI_ASYNC0_STATUS0;
+			idx = comp->id - DDP_COMPONENT_OVLSYS_DLI_ASYNC0;
+		} else if ((comp->id >= DDP_COMPONENT_OVLSYS1_DLI_ASYNC0) &&
+			(comp->id <= DDP_COMPONENT_OVLSYS1_DLI_ASYNC8)) {
+			regs_pa = mtk_crtc->ovlsys1_regs_pa;
+			baddr = mtk_crtc->ovlsys1_regs;
+			off = MT6991_DISP_REG_OVL_DLI_ASYNC0_STATUS0;
+			idx = comp->id - DDP_COMPONENT_OVLSYS1_DLI_ASYNC0;
+		} else if ((comp->id >= DDP_COMPONENT_DLI_ASYNC0) &&
+			(comp->id <= DDP_COMPONENT_DLI_ASYNC7)) {
+			regs_pa = mtk_crtc->config_regs_pa;
+			baddr = mtk_crtc->config_regs;
+			off = MT6991_DISP_REG_DISP_DLI_ASYNC0_STATUS0;
+			idx = comp->id - DDP_COMPONENT_DLI_ASYNC0;
+		} else if ((comp->id >= DDP_COMPONENT_DLI_ASYNC20) &&
+			(comp->id <= DDP_COMPONENT_DLI_ASYNC28)) {
+			regs_pa = mtk_crtc->side_config_regs_pa;
+			baddr = mtk_crtc->side_config_regs;
+			off = MT6991_DISP_REG_DISP_DLI_ASYNC20_STATUS0;
+			idx = comp->id - DDP_COMPONENT_DLI_ASYNC20;
+		}
+	}
 
 	if (!baddr) {
 		DDPDUMP("%s, %s is NULL!\n", __func__, mtk_dump_comp_str(comp));
 		return;
 	}
-	DDPINFO("%s\n", __func__);
-	DDPDUMP("== DISP %s REGS:0x%pa ==\n", mtk_dump_comp_str(comp), &comp->regs_pa);
-	DDPDUMP("0x28C: 0x%08x\n", readl(baddr + 0x28C));
-	DDPDUMP("0x308: 0x%08x 0x%08x\n", readl(baddr + 0x308),
-		readl(baddr + 0x30C));
+
+	DDPDUMP("== DISP %s REGS:0x%pa ==\n", mtk_dump_comp_str(comp), &regs_pa);
+	k = off + (idx * 0x8);
+	DDPDUMP("0x%04x: 0x%08x 0x%08x\n", k,
+		readl(baddr + k), readl(baddr + k + 0x4));
 }
 
 void mtk_dli_async_dump(struct mtk_ddp_comp *comp)
@@ -94,18 +129,19 @@ void mtk_dli_async_dump(struct mtk_ddp_comp *comp)
 
 	priv = mtk_crtc->base.dev->dev_private;
 
+	if (priv && priv->data && priv->data->mmsys_id == MMSYS_MT6991) {
+		mtk_dli_async_dump_mt6991(comp);
+		return;
+	}
+
 	if (!baddr) {
 		DDPDUMP("%s, %s is NULL!\n", __func__, mtk_dump_comp_str(comp));
 		return;
 	}
-	if (priv->data->mmsys_id == MMSYS_MT6991)
-		mtk_dli_async_dump_mt6991(comp);
-	else {
-		DDPDUMP("== DISP %s REGS:0x%pa ==\n", mtk_dump_comp_str(comp), &comp->regs_pa);
-		DDPDUMP("0x26C: 0x%08x\n", readl(baddr + 0x26C));
-		DDPDUMP("0x2C8: 0x%08x 0x%08x\n", readl(baddr + 0x2C8),
-			readl(baddr + 0x2CC));
-	}
+	DDPDUMP("== DISP %s REGS:0x%pa ==\n", mtk_dump_comp_str(comp), &comp->regs_pa);
+	DDPDUMP("0x26C: 0x%08x\n", readl(baddr + 0x26C));
+	DDPDUMP("0x2C8: 0x%08x 0x%08x\n", readl(baddr + 0x2C8),
+		readl(baddr + 0x2CC));
 }
 
 int mtk_dli_async_analysis(struct mtk_ddp_comp *comp)

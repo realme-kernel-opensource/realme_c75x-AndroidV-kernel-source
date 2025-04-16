@@ -10,7 +10,7 @@
 
 &mmc1 {
 	host-index = <1>;
-	status = "okay";
+	status = "disabled";
 	pinctrl-names = "default", "state_uhs";
 	pinctrl-0 = <&mmc1_pins_default>;
 	pinctrl-1 = <&mmc1_pins_uhs>;
@@ -25,8 +25,8 @@
 	sd-uhs-ddr50;
 	cd-debounce-delay-ms = <0>;
 	cd-gpios = <&pio 41 GPIO_ACTIVE_LOW>;
-	vmmc-supply = <&mt6373_vmch_eint_high>;
-	vqmmc-supply = <&mt6373_vmc>;
+	//vmmc-supply = <&mt6373_vmch_eint_high>;
+	//vqmmc-supply = <&mt6373_vmc>;
 	no-mmc;
 	no-sdio;
 };
@@ -46,7 +46,7 @@
 	sd-uhs-sdr104;
 	sd-uhs-ddr50;
 	eint-gpios = <&pio 227 GPIO_ACTIVE_LOW>;
-	vmmc-supply = <&mt6373_vmch_eint_high>;
+	//vmmc-supply = <&mt6373_vmch_eint_high>;
 	vqmmc-supply = <&mt6363_vio18>;
 	no-mmc;
 	no-sd;

@@ -1427,8 +1427,14 @@ void cmdq_util_reserved_memory_lookup(struct device *dev)
 
 	pa = mem->base + mem->size - CMDQ_RECORD_SIZE - CMDQ_STATUS_SIZE;
 
+// use ioremap_wc instead of ioremap to avoid alignment fault when enabled KCSAN
+#if IS_ENABLED(CONFIG_KCSAN)
+	if (!va)
+		va = ioremap_wc(pa, CMDQ_RECORD_SIZE + CMDQ_STATUS_SIZE);
+#else
 	if (!va)
 		va = ioremap(pa, CMDQ_RECORD_SIZE + CMDQ_STATUS_SIZE);
+#endif
 	shared_mem->va = va;
 
 

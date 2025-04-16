@@ -35,6 +35,13 @@
 #ifdef SHARE_WROT_SRAM
 #include "mdp_event_common.h"
 #endif
+#ifdef OPLUS_TRACKPOINT_REPORT
+#include "oplus_display_trackpoint_report.h"
+#endif
+
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+extern unsigned long long last_rdma_start_time;
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 
 int disp_met_set(void *data, u64 val);
 
@@ -436,6 +443,11 @@ static irqreturn_t mtk_disp_rdma_irq_handler(int irq, void *dev_id)
 				DDPAEE("%s: underflow! cnt=%d\n",
 				       mtk_dump_comp_str(rdma),
 				       priv->underflow_cnt);
+#ifdef OPLUS_TRACKPOINT_REPORT
+				if ((priv->underflow_cnt) < 5) {
+				       display_exception_trackpoint_report("DisplayDriverID@@502$$ underflow cnt=%d", priv->underflow_cnt);
+				}
+#endif
 #endif
 			}
 		}

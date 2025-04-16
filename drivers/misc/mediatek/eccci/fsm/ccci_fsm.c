@@ -1709,8 +1709,12 @@ static void fsm_routine_wdt(struct ccci_fsm_ctl *ctl,
 	ns_0 = do_div(time_0, NSEC_PER_SEC);
 	CCCI_NORMAL_LOG(0, FSM, "reset MD after WDT[reset_md: %d], wdt isr: %llu.%06llu\n",
 		reset_md, time_0, ns_0/1000);
-	if (reset_md)
+	if (reset_md) {
 		fsm_monitor_send_message(CCCI_MD_MSG_RESET_REQUEST, 0);
+	//#ifdef OPLUS_FEATURE_MDRST
+		inject_md_status_event(MD_STA_EV_RESET_REQUEST, "WDT_RESET");
+	//#endif
+	}
 
 	md_wdt_rec.routine_cnt++;
 	fsm_finish_command(ctl, cmd, 1);

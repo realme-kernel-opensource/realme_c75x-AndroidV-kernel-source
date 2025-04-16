@@ -29,6 +29,11 @@
 #include "ged_eb.h"
 #include "ged_log.h"
 
+#include "ged_perfetto_tracepoint.h"
+#ifndef OPLUS_ARCH_EXTENDS
+#define OPLUS_ARCH_EXTENDS
+#endif
+
 #if defined(CONFIG_MTK_GPUFREQ_V2)
 #include <ged_gpufreq_v2.h>
 #include <gpufreq_v2.h>
@@ -1518,6 +1523,9 @@ void ged_dvfs_gpu_clock_switch_notify(enum ged_gpu_power_state power_state)
 	}
 	// Update power on/off state
 	trace_tracing_mark_write(5566, "gpu_state", power_state);
+	#ifdef OPLUS_ARCH_EXTENDS
+	trace_oplus_tracing_mark_write(5566, "gpu_state", power_state);
+	#endif /*OPLUS_ARCH_EXTENDS*/
 	//MBrain
 	ged_dvfs_update_power_state_time(power_state);
 }

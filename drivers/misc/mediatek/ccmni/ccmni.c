@@ -251,7 +251,8 @@ static unsigned int is_skb_gro(struct sk_buff *skb)
 	if (packet_type == IPV4_VERSION) {
 		protocol = ip_hdr(skb)->protocol;
 		ihl = ip_hdr(skb)->ihl * 4;
-	} else if (packet_type == IPV6_VERSION) {
+	}
+	else if (packet_type == IPV6_VERSION) {
 		protocol = ipv6_hdr(skb)->nexthdr;
 		ihl = sizeof(struct ipv6hdr);
 	}
@@ -261,9 +262,9 @@ static unsigned int is_skb_gro(struct sk_buff *skb)
 		/* UDP always do GRO */
 		if (g_cur_dl_speed > 300000000LL) {//>300Mbps
 			struct udphdr *udph = (void *)(skb->data + ihl);
-
 			if (htons(udph->len) <= 28) //for tethering offloading scene
 				return 2;
+
 			return 1;
 		}
 	}
@@ -412,10 +413,12 @@ static u16 ccmni_select_queue(struct net_device *dev, struct sk_buff *skb,
 		if (skb->mark & APP_VIP_MARK) {
 			ret = MD_HW_HIGH_Q; /* highest priority */
 		} else if (skb->mark & APP_VIP_MARK2) {
+			//ALPS0935852.8040028 ccmni:modify sim1_streaming_datas output
 			if (is_ack_skb(skb))
 				ret = MD_HW_HIGH_Q;
 			else
 				ret = MD_HW_MEDIUM_Q;
+			//END
 		} else if (ccmni->ack_prio_en) {
 			if (is_ack_skb(skb))
 				ret = MD_HW_HIGH_Q;
@@ -448,13 +451,20 @@ static void ccmni_data_handle_list(int status, unsigned int ccmni_idx)
 	unsigned long flags;
 	struct sk_buff *skb = NULL;
 	struct ccmni_instance *ccmni = NULL;
+	int ret = 0;
 
 	ccmni = ccmni_ctl_blk->ccmni_inst[ccmni_idx];
 
 	if (status) {
 		atomic_set(&ccmni->is_up, 1);
 		while (!skb_queue_empty(&ccmni->rx_list))
-			recv_from_rx_list(&ccmni->rx_list, ccmni_idx);
+			ret += recv_from_rx_list(&ccmni->rx_list, ccmni_idx);
+
+		if (ret) {
+			spin_lock_bh(ccmni->spinlock);
+			ret = napi_gro_list_flush(ccmni);
+			spin_unlock_bh(ccmni->spinlock);
+		}
 	} else {
 		atomic_set(&ccmni->is_up, 0);
 		spin_lock_irqsave(&ccmni->rx_list.lock, flags);
@@ -487,6 +497,11 @@ static int ccmni_queue_recv_skb(unsigned int ccmni_idx, struct sk_buff *skb)
 		while (!skb_queue_empty(&ccmni->rx_list))
 			ret += recv_from_rx_list(&ccmni->rx_list, ccmni_idx);
 
+		if (ret) {
+			spin_lock_bh(ccmni->spinlock);
+			ret = napi_gro_list_flush(ccmni);
+			spin_unlock_bh(ccmni->spinlock);
+		}
 		/*The packet may be out of order when ccmni is up at the*/
 		/* same time, it will be correctly handled by TCP stack.*/
 		ret += ccmni_rx_callback(ccmni_idx, skb, NULL);

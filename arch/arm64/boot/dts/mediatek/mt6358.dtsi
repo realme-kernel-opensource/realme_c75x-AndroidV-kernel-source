@@ -248,6 +248,13 @@
 		};
 	};
 
+	mtk_charger_type: mtk_charger_type {
+		compatible = "mediatek,mt6358-charger-type";
+		io-channels = <&pmic_auxadc AUXADC_VCDT>;
+		io-channel-names = "pmic_vbus_voltage";
+		bc12_active = <0>;
+	};
+
 	pmic_efuse: mt6358-efuse {
 		compatible = "mediatek,mt6358-efuse";
 		#address-cells = <1>;

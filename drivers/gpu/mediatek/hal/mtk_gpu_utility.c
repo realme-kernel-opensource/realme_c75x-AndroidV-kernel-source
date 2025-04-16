@@ -756,6 +756,81 @@ void mtk_gpu_fence_debug_dump(int fd, int pid, int type, int timeouts)
 		mtk_gpu_fence_debug_dump_fp(fd, pid, type, timeouts);
 }
 EXPORT_SYMBOL(mtk_gpu_fence_debug_dump);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_POWERMODEL)
+/* ----------------------shadercore state change get fp-------------------------- */
+//Get gpu shader core state form mali kernel driver
+u64 (*oplus_get_mali_shadercore_state_fp)(void) = NULL;
+EXPORT_SYMBOL(oplus_get_mali_shadercore_state_fp);
+
+bool oplus_get_mali_shadercore_state(u64 *shadercore_state)
+{
+	if (oplus_get_mali_shadercore_state_fp != NULL) {
+		*shadercore_state = oplus_get_mali_shadercore_state_fp();
+		return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL(oplus_get_mali_shadercore_state);
+
+
+/* ----------------------gpu state notify ged enable fp-------------------------- */
+void (*oplus_pm_gpu_state_notify_enable_fp)(bool enable) = NULL;
+EXPORT_SYMBOL(oplus_pm_gpu_state_notify_enable_fp);
+bool oplus_pm_gpu_state_notify_enable(bool enable)
+{
+	if (oplus_pm_gpu_state_notify_enable_fp != NULL) {
+		oplus_pm_gpu_state_notify_enable_fp(enable);
+		return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL(oplus_pm_gpu_state_notify_enable);
+
+
+/* ----------------------gpu state notify mali enable fp-------------------------- */
+void (*oplus_mali_gpu_state_notify_enable_fp)(bool enable) = NULL;
+EXPORT_SYMBOL(oplus_mali_gpu_state_notify_enable_fp);
+bool oplus_mali_gpu_state_notify_enable(bool enable)
+{
+	if (oplus_mali_gpu_state_notify_enable_fp != NULL) {
+		oplus_mali_gpu_state_notify_enable_fp(enable);
+		return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL(oplus_mali_gpu_state_notify_enable);
+
+
+/* ----------------------shadercore state change notify fp-------------------------- */
+//Mali kernel driver notify when shader core state changed
+void (*oplus_mali_notify_shadercore_state_change_fp)(u64 shadercore_state) = NULL;
+EXPORT_SYMBOL(oplus_mali_notify_shadercore_state_change_fp);
+bool oplus_mali_notify_shadercore_state_change(u64 shadercore_state)
+{
+	if (oplus_mali_notify_shadercore_state_change_fp != NULL) {
+		oplus_mali_notify_shadercore_state_change_fp(shadercore_state);
+		return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL(oplus_mali_notify_shadercore_state_change);
+
+
+/* ----------------------gpu frequency/shader core state change notify fp-------------------------- */
+void (*oplus_notify_pm_gpustate_change_fp)(struct oplus_gpu_state *state) = NULL;
+EXPORT_SYMBOL(oplus_notify_pm_gpustate_change_fp);
+bool oplus_notify_pm_gpustate_change(struct oplus_gpu_state *state)
+{
+	if (oplus_notify_pm_gpustate_change_fp != NULL) {
+		oplus_notify_pm_gpustate_change_fp(state);
+		return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL(oplus_notify_pm_gpustate_change);
+#endif
+
 static int mtk_gpu_hal_init(void)
 {
 	/*Do Nothing*/

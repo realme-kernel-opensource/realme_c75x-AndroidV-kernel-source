@@ -4988,6 +4988,9 @@ enum {
 	HP_MUX_HP,
 	HP_MUX_TEST_MODE,
 	HP_MUX_HP_IMPEDANCE,
+#if IS_ENABLED(CONFIG_SND_SOC_OPLUS_PA_MANAGER)
+	HP_MUX_HP_DUALSPK,
+#endif
 	HP_MUX_MASK = 0x7,
 };
 
@@ -5183,6 +5186,11 @@ struct mt6359_priv {
 
 	/* regulator */
 	struct regulator *reg_vaud18;
+#if IS_ENABLED(CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH)
+/* 2021/02/26,add for change micbias0 and micbias2*/
+	int micb0_val;
+	int micb2_val;
+#endif /* CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH */
 };
 
 #define MT_SOC_ENUM_EXT_ID(xname, xenum, xhandler_get, xhandler_put, id) \

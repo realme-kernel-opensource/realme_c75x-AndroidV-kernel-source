@@ -17,10 +17,15 @@
 #include <linux/wait.h>
 #include <linux/ktime.h>
 #include <linux/ctype.h>
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#include <linux/version.h>
+#include <linux/regmap.h>
+#endif
 #include "mtk_gauge.h"
 #include "mtk_battery_daemon.h"
-
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#include <soc/oplus/system/oplus_project.h>
+#endif
 
 #define NETLINK_FGD 26
 #define UNIT_TRANS_10	10
@@ -116,6 +121,23 @@ do {\
 	.prop	= _prop,	\
 	.set	= _name##_set,						\
 }
+
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define AG_LOG_MAX_LEN 2000
+
+#define DEFAULT_BATT_TEMP_TEN 250
+#define DEFAULT_BATT_TEMP 25
+#define DEFAULT_BATT_TEMP_LOW -400
+#define DEFAULT_BATT_TEMP_HIGH 1250
+#define DEFAULT_BATT_TEMP_LITTLE_LOW -2000
+#define TABLE_NUM_MAX 165
+
+#define RM_CHECK_RETRY_TIMES 5
+#define RM_CHECK_DELAY_20S msecs_to_jiffies(20000)
+#define REMOVED_BATT_TEMP -400
+#endif
+
 enum manager_cmd {
 	MANAGER_WAKE_UP_ALGO,
 	MANAGER_NOTIFY_CHR_FULL,
@@ -146,6 +168,15 @@ enum property_control_data {
 	CONTROL_GAUGE_PROP_BATTERY_TEMPERATURE_ADC,
 	CONTROL_MAX,
 };
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if (defined(CONFIG_OPLUS_CHARGER_MTK6877) || defined(CONFIG_OPLUS_CHARGER_MTK6769R) || defined(CONFIG_OPLUS_CHARGER_MTK6833))
+struct mtk_oplus_batt_interface
+{
+	bool(*set_charge_power_sel)(int select);
+};
+#endif
+#endif
 
 #define I2C_FAIL_TH 3
 struct property_control {
@@ -419,7 +450,11 @@ struct fuelgauge_profile_struct {
 	int mah;
 	unsigned short voltage;
 	unsigned short resistance; /* Ohm*/
-	int percentage;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	signed short percentage;
+#else
+	unsigned short percentage;
+#endif
 	struct fuelgauge_charger_struct charge_r;
 };
 
@@ -934,10 +969,21 @@ struct irq_controller {
 #define BAT_VOLTAGE_LOW_BOUND 3000
 #define BAT_VOLTAGE_HIGH_BOUND 3450
 #define LOW_TMP_BAT_VOLTAGE_LOW_BOUND 3100
+
+#ifndef OPLUS_FEATURE_CHG_BASIC
 #define SHUTDOWN_TIME 40
+#else
+#define SHUTDOWN_TIME 60
+#endif
+
 #define AVGVBAT_ARRAY_SIZE 30
 #define INIT_VOLTAGE 3450
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define BATTERY_SHUTDOWN_TEMPERATURE 90
+#else
 #define BATTERY_SHUTDOWN_TEMPERATURE 60
+#endif
 #define DISABLE_POWER_PATH_VOLTAGE 2800
 
 struct shutdown_condition {
@@ -1148,6 +1194,14 @@ struct mtk_battery {
 	int tbat;
 	int soc;
 	int ui_soc;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* add for soh and aging issue.*/
+        int soh;
+	int tbat_precise;
+	/*fcc*/
+	int prev_batt_fcc;
+	int prev_batt_remaining_capacity;
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 	ktime_t uisoc_oldtime;
 	int d_saved_car;
 	struct zcv_filter zcvf;
@@ -1247,6 +1301,9 @@ struct mtk_battery {
 
 	/*simulator log*/
 	struct simulator_log log;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	char ag_log[AG_LOG_MAX_LEN];
+#endif
 
 	/* cust req ocv data */
 	int algo_qmax;
@@ -1290,6 +1347,9 @@ struct mtk_battery {
 	int pre_fg_current_state;
 	int pre_fg_r_value;
 	int pre_bat_temperature_val2;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct delayed_work	 oplus_startup_rm_check_work;
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 	void (*shutdown)(struct mtk_battery *gm);
 	int (*suspend)(struct mtk_battery *gm, pm_message_t state);
@@ -1322,6 +1382,12 @@ struct mtk_battery {
 	unsigned int notify_code;
 
 	struct shutdown_data sd_data;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	int nafg_c_dltv_thr;
+	int old_pid;
+	int force_restart_daemon;
+	bool support_ntc_01c_precision;
+#endif
 };
 
 struct mtk_battery_manager {
@@ -1384,6 +1450,16 @@ struct mtk_battery_sysfs_field_info {
 };
 
 extern struct mtk_battery *gmb;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+struct FUELGAUGE_TEMPERATURE {
+	signed int BatteryTemp;
+	signed int TemperatureR;
+};
+
+extern struct FUELGAUGE_TEMPERATURE Fg_Temperature_01_Precision_Table[];
+#define ODM_SPACE_B_33W	21684
+#define ODM_SPACE_D_18W	21690
+#endif
 
 /* coulomb service */
 extern void gauge_coulomb_service_init(struct mtk_battery *gm);
@@ -1474,6 +1550,19 @@ extern void wake_up_power_misc(struct shutdown_controller *sdc);
 extern int mtk_battery_daemon_init(struct platform_device *pdev);
 extern void mtk_irq_thread_init(struct mtk_battery *gm);
 //extern int wakeup_fg_daemon(struct mtk_battery *gm, unsigned int flow_state, int cmd, int para1);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+int battery_type_check(void);
+bool is_fuelgauge_apply(void);
+
+extern bool prj_is_subboard_temp_support(void);
+extern int oplus_chg_get_voocphy_support(void);
+extern int oplus_chg_get_subboard_temp_cal(void);
+extern bool prj_for_mtk_60w_support(void);
+extern int oplus_force_get_subboard_temp(void);
+extern int oplus_chg_get_subboard_temp_cal(void);
+extern void oplus_chg_adc_switch_ctrl(void);
+#endif
 
 /* customize */
 #define DIFFERENCE_FULLOCV_ITH	200	/* mA */

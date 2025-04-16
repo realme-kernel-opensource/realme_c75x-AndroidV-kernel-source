@@ -758,7 +758,7 @@ exit_free:
     return ret;
 }
 
-static int goodix_tptest_prepare(struct goodix_ts_test *ts_test)
+static noinline int goodix_tptest_prepare(struct goodix_ts_test *ts_test)
 {
     int ret;
 	struct goodix_ic_config *cfg = &ts_test->test_config;
@@ -793,7 +793,7 @@ static int goodix_tptest_prepare(struct goodix_ts_test *ts_test)
     return 0;
 }
 
-static void goodix_tptest_finish(struct goodix_ts_test *ts_test)
+static noinline void goodix_tptest_finish(struct goodix_ts_test *ts_test)
 {
 	ts_info("TP test finish IN");
     /* reset chip */
@@ -1353,7 +1353,7 @@ static int send_test_cmd(struct goodix_ts_test *ts_test,
 #define INSPECT_PARAM_CMD				0xAA
 #define SHORT_TEST_FINISH_FLAG  		0x88
 #define SHORT_TEST_THRESHOLD_REG		0x20402
-static void goodix_shortcircut_test(struct goodix_ts_test *ts_test)
+static noinline void goodix_shortcircut_test(struct goodix_ts_test *ts_test)
 {
     int ret = 0;
     int retry;
@@ -1906,7 +1906,7 @@ static int goodix_analysis_self_noisedata(struct goodix_ts_test *ts_test)
 	return 0;		
 }
 
-static void goodix_capacitance_test(struct goodix_ts_test *ts_test)
+static noinline void goodix_capacitance_test(struct goodix_ts_test *ts_test)
 {
 	int ret;
 
@@ -2742,7 +2742,7 @@ save_end:
 }
 #endif // SAVE_IN_CSV
 
-static void goodix_put_test_result(struct goodix_ts_test *ts_test,
+static noinline void goodix_put_test_result(struct goodix_ts_test *ts_test,
 		struct ts_rawdata_info *info)
 {
 	int i;

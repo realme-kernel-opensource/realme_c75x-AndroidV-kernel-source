@@ -37,6 +37,14 @@
 #include "fusion.h"
 #endif
 
+#if IS_ENABLED(CONFIG_CUSTOM_KERNEL_REAR_ALS)
+#include "rear_als.h"
+#endif
+
+#if IS_ENABLED(CONFIG_CUSTOM_KERNEL_REAR_FLICKER)
+#include "rear_flicker.h"
+#endif
+
 static int __init sensor_init(void)
 {
 #if IS_ENABLED(CONFIG_CUSTOM_KERNEL_ACCELEROMETER)
@@ -82,6 +90,20 @@ static int __init sensor_init(void)
 		return -ENODEV;
 	}
 #endif
+
+#if IS_ENABLED(CONFIG_CUSTOM_KERNEL_REAR_ALS)
+	if (rear_als_probe()) {
+		pr_err("failed to register rear_als driver\n");
+		return -ENODEV;
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_CUSTOM_KERNEL_REAR_FLICKER)
+	if (rear_flicker_probe()) {
+		pr_err("failed to register rear_flicker driver\n");
+		return -ENODEV;
+	}
+#endif
 	return 0;
 }
 
@@ -117,6 +139,14 @@ static void __exit sensor_exit(void)
 
 #if IS_ENABLED(CONFIG_CUSTOM_KERNEL_SENSOR_FUSION)
 	fusion_remove();
+#endif
+
+#if IS_ENABLED(CONFIG_CUSTOM_KERNEL_REAR_ALS)
+	rear_als_remove();
+#endif
+
+#if IS_ENABLED(CONFIG_CUSTOM_KERNEL_REAR_FLICKER)
+	rear_flicker_remove();
 #endif
 
 }

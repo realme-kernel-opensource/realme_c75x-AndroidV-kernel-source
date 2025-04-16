@@ -34,6 +34,8 @@ extern void mtk_mdm_txpwr_exit(void);
 extern int mtk_mdm_txpwr_init(void);
 extern void mtktscharger_exit(void);
 extern int mtktscharger_init(void);
+extern void mtk_tscharger_exit(void);
+extern int mtk_tscharger_init(void);
 extern void wmt_tm_deinit(void);
 extern int wmt_tm_init(void);
 extern void tsallts_exit(void);

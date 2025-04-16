@@ -36,6 +36,15 @@
 #include "../scp_spk/mtk-scp-spk-common.h"
 #endif
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+#include "../feedback/oplus_audio_kernel_fb.h"
+#ifdef dev_err
+#undef dev_err
+#define dev_err dev_err_fb_delay
+#endif
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+
+
 static const struct snd_pcm_hardware mt6768_afe_hardware = {
 	.info = (SNDRV_PCM_INFO_MMAP |
 		 SNDRV_PCM_INFO_INTERLEAVED |
@@ -73,7 +82,11 @@ static int mt6768_fe_startup(struct snd_pcm_substream *substream,
 	ret = snd_pcm_hw_constraint_integer(runtime,
 					    SNDRV_PCM_HW_PARAM_PERIODS);
 	if (ret < 0)
-		dev_err(afe->dev, "snd_pcm_hw_constraint_integer failed\n");
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_fb_fatal_delay(afe->dev, "snd_pcm_hw_constraint_integer failed\n");
+#else
+		dev_info(afe->dev, "snd_pcm_hw_constraint_integer failed\n");
+#endif
 
 	/* dynamic allocate irq to memif */
 	if (memif->irq_usage < 0) {
@@ -83,8 +96,13 @@ static int mt6768_fe_startup(struct snd_pcm_substream *substream,
 			/* link */
 			memif->irq_usage = irq_id;
 		} else {
-			dev_err(afe->dev, "%s() error: no more asys irq\n",
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+			dev_err_fb_fatal_delay(afe->dev, "%s() error: no more asys irq\n",
 				__func__);
+#else
+			dev_info(afe->dev, "%s() error: no more asys irq\n",
+				__func__);
+#endif
 			ret = -EBUSY;
 		}
 	}
@@ -159,8 +177,15 @@ int mt6768_fe_trigger(struct snd_pcm_substream *substream, int cmd,
 		}
 
 		if (ret) {
-			dev_err(afe->dev, "%s(), error, id %d, memif enable, ret %d\n",
-				__func__, id, ret);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+				dev_err_fb_fatal_delay(afe->dev,
+					"%s(), error, id %d, memif enable, ret %d\n",
+					__func__, id, ret);
+#else
+				dev_info(afe->dev,
+					"%s(), error, id %d, memif enable, ret %d\n",
+					__func__, id, ret);
+#endif
 			return ret;
 		}
 
@@ -213,8 +238,15 @@ int mt6768_fe_trigger(struct snd_pcm_substream *substream, int cmd,
 		ret = mtk_memif_set_disable(afe, id);
 #endif
 		if (ret) {
-			dev_err(afe->dev, "%s(), error, id %d, memif enable, ret %d\n",
-				__func__, id, ret);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+				dev_err_fb_fatal_delay(afe->dev,
+					"%s(), error, id %d, memif enable, ret %d\n",
+					__func__, id, ret);
+#else
+				dev_info(afe->dev,
+					"%s(), error, id %d, memif enable, ret %d\n",
+					__func__, id, ret);
+#endif
 		}
 
 		/* disable interrupt */
@@ -2098,8 +2130,13 @@ static irqreturn_t mt6768_afe_irq_handler(int irq_id, void *dev)
 	status_mcu = status & mcu_en & AFE_IRQ_STATUS_BITS;
 
 	if (ret || status_mcu == 0) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_not_fb(afe->dev, "%s(), irq status err, ret %d, status 0x%x, mcu_en 0x%x\n",
+			__func__, ret, status, mcu_en);
+#else
 		dev_err(afe->dev, "%s(), irq status err, ret %d, status 0x%x, mcu_en 0x%x\n",
 			__func__, ret, status, mcu_en);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 
 		goto err_irq;
 	}
@@ -3297,7 +3334,11 @@ static int mt6768_afe_pcm_dev_probe(struct platform_device *pdev)
 	/* init audio related clock */
 	ret = mt6768_init_clock(afe);
 	if (ret) {
-		dev_err(dev, "init clock error\n");
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_fb_fatal_delay(dev, "init clock error: %d\n", ret);
+#else
+		dev_info(dev, "init clock error: %d\n", ret);
+#endif
 		return ret;
 	}
 
@@ -3328,7 +3369,11 @@ static int mt6768_afe_pcm_dev_probe(struct platform_device *pdev)
 	/* init gpio */
 	ret = mt6768_afe_gpio_init(afe);
 	if (ret)
-		dev_err(dev, "init gpio error\n");
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_fb_fatal_delay(dev, "init gpio error\n");
+#else
+		dev_info(dev, "init gpio error\n");
+#endif
 
 	/* init sram */
 	afe->sram = devm_kzalloc(&pdev->dev, sizeof(struct mtk_audio_sram),
@@ -3375,13 +3420,21 @@ static int mt6768_afe_pcm_dev_probe(struct platform_device *pdev)
 	/* request irq */
 	irq_id = platform_get_irq(pdev, 0);
 	if (irq_id <= 0) {
-		dev_err(dev, "%pOFn no irq found\n", dev->of_node);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_fb_fatal_delay(dev, "%pOFn no irq found\n", dev->of_node);
+#else
+		dev_info(dev, "%pOFn no irq found\n", dev->of_node);
+#endif
 		return irq_id < 0 ? irq_id : -ENXIO;
 	}
 	ret = devm_request_irq(dev, irq_id, mt6768_afe_irq_handler,
 			       IRQF_TRIGGER_NONE, "Afe_ISR_Handle", (void *)afe);
 	if (ret) {
-		dev_err(dev, "could not request_irq for Afe_ISR_Handle\n");
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+		dev_err_fb_fatal_delay(dev, "could not request_irq for Afe_ISR_Handle\n");
+#else
+		dev_info(dev, "could not request_irq for Afe_ISR_Handle\n");
+#endif
 		return ret;
 	}
 #endif
@@ -3457,8 +3510,12 @@ err_dai_component:
 
 err_pm_disable:
 	pm_runtime_disable(&pdev->dev);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+	if (ret) {
+		pr_err_fb_fatal_delay("%s:failed ret=%d", __func__, ret);
+	}
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 
-	dev_info(dev, "%s(), return %d\n", __func__, ret);
 	return ret;
 }
 

@@ -23,6 +23,19 @@
 #include <sched/pelt.h>
 #include <linux/stop_machine.h>
 #include <linux/kthread.h>
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_fair.h>
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_common.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+#include <../kernel/oplus_cpu/sched/frame_boost/frame_group.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_CPU_AUDIO_PERF)
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_audio.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_LOADBALANCE)
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_balance.h>
+#endif
 #if IS_ENABLED(CONFIG_MTK_THERMAL_INTERFACE)
 #include <thermal_interface.h>
 #endif
@@ -32,6 +45,9 @@
 #endif
 #if IS_ENABLED(CONFIG_MTK_SCHED_FAST_LOAD_TRACKING)
 #include "eas/group.h"
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_pipeline.h>
 #endif
 #define CREATE_TRACE_POINTS
 #include "sched_trace.h"
@@ -1733,7 +1749,7 @@ inline int util_fits_capacity(unsigned long util, unsigned long uclamp_min,
 
 	/* Change fit status from 0 to 1 only if uclamp max restrict util. */
 	uclamp_max_fits = (capacity_orig == SCHED_CAPACITY_SCALE) && (uclamp_max == SCHED_CAPACITY_SCALE);
-	uclamp_max_fits = !uclamp_max_fits && (uclamp_max <= capacity_orig);
+	uclamp_max_fits = !uclamp_max_fits && (uclamp_max <= cpu_cap_ceiling(cpu));
 	fit = fit || uclamp_max_fits;
 
 	/* Change fit status from 1 to -1 only if uclamp min raise util. */
@@ -2139,6 +2155,9 @@ void mtk_find_energy_efficient_cpu(void *data, struct task_struct *p, int prev_c
 	struct find_best_candidates_parameters fbc_params;
 	unsigned long cpu_utils[MAX_NR_CPUS] = {[0 ... MAX_NR_CPUS-1] = ULONG_MAX};
 	int recent_used_cpu, target;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	int pipeline_cpu;
+#endif
 	bool is_vip = false;
 	int vip_prio = NOT_VIP;
 	struct cpumask vip_candidate;
@@ -2162,6 +2181,33 @@ void mtk_find_energy_efficient_cpu(void *data, struct task_struct *p, int prev_c
 
 	rcu_read_lock();
 	compute_effective_softmask(p, &latency_sensitive, &effective_softmask);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	pipeline_cpu = oplus_get_task_pipeline_cpu(p);
+	if (pipeline_cpu != -1) {
+		bool ctc = cpumask_test_cpu(pipeline_cpu, p->cpus_ptr);
+		bool ca = cpu_active(pipeline_cpu);
+		bool ncp = !cpu_paused(pipeline_cpu);
+		bool nllt = !oplus_pipeline_low_latency_task(pipeline_cpu);
+		bool pipeline_success = ctc && ca && ncp && nllt;
+
+		/*
+		 trace_printk("comm=%s, pid=%d, tid=%d, ctc=%d, ca=%d, ncp=%d, nllt=%d, pipeline_cpu=%d, pipeline_success=%d\n",
+			p->comm, p->pid, p->tgid, ctc, ca, ncp, nllt, pipeline_cpu, pipeline_success);
+		*/
+
+		if (pipeline_success) {
+			rcu_read_unlock();
+			*new_cpu = pipeline_cpu;
+			select_reason = LB_PIPELINE;
+			goto pipeline_out;
+		}
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_CPU_AUDIO_PERF)
+	oplus_sched_assist_audio_latency_sensitive(p, &latency_sensitive);
+#endif
 
 	pd = rcu_dereference(rd->pd);
 #if IS_ENABLED(CONFIG_MTK_SCHED_VIP_TASK)
@@ -2258,6 +2304,10 @@ void mtk_find_energy_efficient_cpu(void *data, struct task_struct *p, int prev_c
 		if (!target_pd)
 			continue;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+		if (should_ux_task_skip_cpu(p, cpu))
+			continue;
+#endif
 		eenv.gear_idx = topology_cluster_id(cpu);
 		cpus = to_cpumask(target_pd->em_pd->cpus);
 		eenv.dst_cpu = cpu;
@@ -2455,6 +2505,19 @@ backup_unlock:
 done:
 	irq_log_store();
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	if (set_frame_group_task_to_perfer_cpu(p, new_cpu))
+		select_reason = LB_FBT_PREFER;
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (set_ux_task_to_prefer_cpu(p, new_cpu)) {
+		select_reason = LB_UX_PREFER;
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+pipeline_out:
+#endif
 	if (trace_sched_find_energy_efficient_cpu_enabled())
 		trace_sched_find_energy_efficient_cpu(in_irq, best_delta, best_energy_cpu,
 				best_energy_cpu, idle_max_spare_cap_cpu, sys_max_spare_cap_cpu);
@@ -2514,9 +2577,21 @@ static struct task_struct *detach_a_hint_task(struct rq *src_rq, int dst_cpu)
 		if (task_on_cpu(src_rq, p))
 			continue;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+		if (should_ux_task_skip_cpu(p, dst_cpu))
+			continue;
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+		if (fbg_skip_migration(p, cpu_of(src_rq), dst_cpu))
+			continue;
+#endif
 		task_util = uclamp_task_util(p);
 
 		compute_effective_softmask(p, &latency_sensitive, &effective_softmask);
+
+#if IS_ENABLED(CONFIG_OPLUS_CPU_AUDIO_PERF)
+		oplus_sched_assist_audio_latency_sensitive(p, &latency_sensitive);
+#endif
 
 		if (latency_sensitive && !cpumask_test_cpu(dst_cpu, &effective_softmask))
 			continue;
@@ -2606,6 +2681,11 @@ int migrate_running_task(int this_cpu, struct task_struct *p, struct rq *target,
 	unsigned long flags;
 	bool latency_sensitive = false;
 	struct cpumask effective_softmask;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	if (oplus_pipeline_task_skip_cpu(p, this_cpu))
+		return true;
+#endif
 
 	compute_effective_softmask(p, &latency_sensitive, &effective_softmask);
 	raw_spin_rq_lock_irqsave(target, flags);
@@ -2718,6 +2798,11 @@ void mtk_sched_newidle_balance(void *data, struct rq *this_rq, struct rq_flags *
 	struct cpumask effective_softmask;
 	bool had_pull_vvip = false;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_LOADBALANCE)
+	if (__oplus_newidle_balance(data, this_rq, rf, pulled_task, done))
+		return;
+#endif
+
 	if (!get_eas_hook())
 		return;
 
@@ -2763,6 +2848,12 @@ void mtk_sched_newidle_balance(void *data, struct rq *this_rq, struct rq_flags *
 	 * re-start the picking loop.
 	 */
 	rq_unpin_lock(this_rq, rf);
+
+#if IS_ENABLED(CONFIG_OPLUS_CPU_AUDIO_PERF)
+	if (oplus_sched_assist_audio_idle_balance(this_rq))
+		goto audio_pulled;
+#endif
+
 	raw_spin_rq_unlock(this_rq);
 
 	this_cpu = this_rq->cpu;
@@ -2833,6 +2924,9 @@ void mtk_sched_newidle_balance(void *data, struct rq *this_rq, struct rq_flags *
 		put_task_struct(best_running_task);
 out:
 	raw_spin_rq_lock(this_rq);
+#if IS_ENABLED(CONFIG_OPLUS_CPU_AUDIO_PERF)
+audio_pulled:
+#endif
 	/*
 	 * While browsing the domains, we released the rq lock, a task could
 	 * have been enqueued in the meantime. Since we're not going idle,

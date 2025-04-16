@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 export MTK_PLATFORM := $(subst ",,$(CONFIG_MTK_PLATFORM))
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include
 obj-$(CONFIG_MTK_BLOCK_IO_TRACER) += blocktag/
 obj-$(CONFIG_MTK_SLBC) += slbc/
 obj-$(CONFIG_MTK_CM_MGR) += cm_mgr/
@@ -148,6 +149,9 @@ obj-$(CONFIG_MTK_PKVM_TMEM) += pkvm_tmem/
 obj-$(CONFIG_DEVICE_MODULES_PCIE_MEDIATEK_SMT) += pcie/
 obj-$(CONFIG_MTK_SMAP) += smap/
 obj-$(CONFIG_MTK_WLA) += wla/
+#ifdef OPLUS_FEATURE_OEM_OCDT
+obj-$(CONFIG_MTK_BOOT_COMMON) += boot_common/
+#endif
 obj-$(CONFIG_MTK_SPM_CAREVENT) += carevent/
 obj-$(CONFIG_ARM) += arm_div/
 obj-$(CONFIG_ROOTFS_CHECK) += rootfs_check/
@@ -155,3 +159,5 @@ obj-$(CONFIG_MTK_PKVM_MKP) += pkvm_mkp/
 obj-$(CONFIG_MTK_PKVM_MTK_SMC_HANDLER) += pkvm_mgmt/
 obj-$(CONFIG_MTK_SPM_VHOST_DMABUF_PHYS) += vhost_dmabuf_phys/
 obj-$(CONFIG_MTK_PKVM_SMMU) += pkvm_smmu/
+obj-$(CONFIG_CAMERA_PMIC_ENABLE) += pmic_ldo_set/
+obj-$(CONFIG_LDO_AW37004) += aw37004/

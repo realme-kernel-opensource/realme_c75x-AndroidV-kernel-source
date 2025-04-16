@@ -32,7 +32,7 @@
 #define STR_SIZE 1024
 #define MAX_VALUE 0x7FFF
 #define MAX_POWER_DRAM 4000
-#define MAX_POWER_DISPLAY 2000
+#define MAX_POWER_DISPLAY 2700
 #define SOC_ERROR 3000
 #define BAT_CIRCUIT_DEFAULT_RDC 55
 #define BAT_PATH_DEFAULT_RDC 100
@@ -43,6 +43,10 @@
 #define PPB_LOG_DURATION msecs_to_jiffies(20000)
 #define HPT_INIT_SETTING    7
 #define DEFAULT_COMBO0_UISOC MAX_VALUE
+
+#ifndef OPLUS_FEATURE_CHG_BASIC
+#define OPLUS_FEATURE_CHG_BASIC
+#endif
 
 static bool mt_ppb_debug;
 static spinlock_t ppb_lock;
@@ -213,6 +217,19 @@ static void __used hpt_ctrl_write(unsigned int val, int offset)
 
 	writel(val, (void __iomem *)(hpt_ctrl_base + offset * 4));
 }
+
+int ppb_set_mode(unsigned int mode)
+{
+	if (!ppb_sram_base) {
+		pr_info("%s: ppb_sram_base error %p\n", __func__, ppb_sram_base);
+		return -1;
+	}
+
+	ppb_write_sram(mode, PPB_MODE);
+	return 0;
+}
+EXPORT_SYMBOL(ppb_set_mode);
+
 
 static void ppb_allocate_budget_manager(void)
 {
@@ -821,6 +838,7 @@ static void bat_handler(struct work_struct *work)
 	if (!pb.psy)
 		return;
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	psy_mtk = power_supply_get_by_name("mtk-gauge");
 	if (!psy_mtk || IS_ERR(psy_mtk)) {
 		psy_mtk = devm_power_supply_get_by_phandle(pb.dev, "gauge");
@@ -852,14 +870,57 @@ static void bat_handler(struct work_struct *work)
 		return;
 
 	temp = val.intval / 10;
+#else
+	psy_mtk = power_supply_get_by_name("battery");
+	if (!psy_mtk) {
+		pr_err("%s get psy_mtk failed!\n", __func__);
+		return;
+	}
+
+	ret = power_supply_get_property(psy_mtk, POWER_SUPPLY_PROP_CAPACITY, &val);
+	if (ret) {
+		pr_err("%s get soc failed!\n", __func__);
+		return;
+	}
+
+	soc = val.intval;
+
+	if (soc == 0) {
+		pr_err("%s get soc=0 return!\n", __func__);
+		return;
+	}
+
+	qmax = 0; /* set qmax 0 and use cvt table qmax */
+
+	ret = power_supply_get_property(psy_mtk, POWER_SUPPLY_PROP_TEMP, &val);
+	if (ret) {
+		pr_err("%s get temp failed!\n", __func__);
+		return;
+	}
+
+	temp = val.intval / 10;
+
+#endif
+
+	pr_info("%s:%d soc[%d] qmax[%d] temp[%d]\n", __func__, __LINE__, soc, qmax, temp);
+
 	temp_stage = pb.temp_cur_stage;
 
 	cycle = 0;
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	if (pb.aging_max_stage > 0) {
 		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_CYCLE_COUNT, &val);
 		if (!ret)
 			cycle = val.intval;
 	}
+#else
+	if (pb.aging_max_stage > 0) {
+		ret = power_supply_get_property(psy_mtk, POWER_SUPPLY_PROP_CYCLE_COUNT, &val);
+		if (!ret)
+			cycle = val.intval;
+	}
+	pr_info("%s:%d cycle is %d\n", __func__, __LINE__, cycle);
+#endif
 
 	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_CAPACITY, &val);
 		if (ret)

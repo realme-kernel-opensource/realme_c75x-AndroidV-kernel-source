@@ -30,6 +30,9 @@
 #include <trace/hooks/dtask.h>
 #include <trace/hooks/cgroup.h>
 #include <trace/hooks/sys.h>
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_fair.h>
+#endif
 
 #include <task_turbo.h>
 #include <task_turbo_v.h>
@@ -1400,6 +1403,15 @@ int find_best_turbo_cpu(struct task_struct *p)
 			    !cpu_active(iter_cpu))
 				continue;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+			/*
+			 * TODO: If turbo task is ux task, should we add more conditions
+			 */
+			/*
+			if (should_ux_task_skip_cpu(p, iter_cpu))
+				continue;
+			*/
+#endif
 			/*
 			 * favor tasks that prefer idle cpus
 			 * to improve latency

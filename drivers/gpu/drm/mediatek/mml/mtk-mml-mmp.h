@@ -103,6 +103,10 @@ struct mml_mmp_events_t {
 
 	/* events for dvfs */
 	mmp_event throughput;
+	mmp_event rrot_size;
+	mmp_event datasize;
+	mmp_event hrt;
+	mmp_event bw_port;
 	mmp_event bandwidth;
 	mmp_event mmdvfs;
 	mmp_event overdue;

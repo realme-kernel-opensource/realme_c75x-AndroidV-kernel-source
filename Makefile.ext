@@ -42,6 +42,8 @@ obj-y += ../$(DEVICE_MODULES_REL_DIR)/drivers/pinctrl/mediatek/
 
 obj-y += ../$(DEVICE_MODULES_REL_DIR)/drivers/power/supply/
 
+obj-y += ../$(DEVICE_MODULES_REL_DIR)/drivers/power/
+
 obj-y += ../$(DEVICE_MODULES_REL_DIR)/drivers/rtc/
 
 obj-y += ../$(DEVICE_MODULES_REL_DIR)/drivers/remoteproc/

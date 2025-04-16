@@ -145,6 +145,9 @@ extern const struct dvfsrc_config mt6877_dvfsrc_config;
 extern const struct dvfsrc_config mt6983_dvfsrc_config;
 extern const struct dvfsrc_config mt6897_dvfsrc_config;
 extern const struct dvfsrc_config mt6989_dvfsrc_config;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLC)
+extern u32 get_dvfsrc_sw_bw(struct mtk_dvfsrc *dvfsrc, int idx);
+#endif
 
 extern const struct dvfsrc_qos_config mt6761_qos_config;
 #endif

@@ -2704,8 +2704,8 @@ void mhal_DPTx_hw_phy_set_param(struct mtk_dp *mtk_dp, BYTE MAX_LANECOUNT)
 	msPhyWrite4Byte(mtk_dp, 0x1338,0x110E0C0A);
 	msPhyWrite4Byte(mtk_dp, 0x1438,0x110E0C0A);
 
-	msPhyWrite4Byte(mtk_dp, 0x113C,0x1212110E);
-	msPhyWrite4Byte(mtk_dp, 0x123C,0x1212110E);
+	msPhyWrite4Byte(mtk_dp, 0x113C,0x1312110E);
+	msPhyWrite4Byte(mtk_dp, 0x123C,0x1312110E);
 	msPhyWrite4Byte(mtk_dp, 0x133C,0x1212110E);
 	msPhyWrite4Byte(mtk_dp, 0x143C,0x1212110E);
 

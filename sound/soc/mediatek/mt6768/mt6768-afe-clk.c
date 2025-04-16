@@ -18,6 +18,13 @@
 #include <mtk_spm_resource_req.h>
 #endif
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+#include "../feedback/oplus_audio_kernel_fb.h"
+#ifdef dev_err
+#undef dev_err
+#define dev_err dev_err_fb
+#endif
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 static DEFINE_MUTEX(mutex_request_dram);
 
 enum {

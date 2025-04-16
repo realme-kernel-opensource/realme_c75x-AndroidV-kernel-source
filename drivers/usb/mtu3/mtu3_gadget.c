@@ -431,6 +431,8 @@ static int mtu3_gadget_queue(struct usb_ep *ep,
 	struct mtu3 *mtu = mep->mtu;
 	unsigned long flags;
 	int ret = 0;
+	struct list_head *new = NULL;
+	struct list_head *head = NULL;
 
 	if (!req->buf)
 		return -ENODATA;
@@ -483,6 +485,15 @@ static int mtu3_gadget_queue(struct usb_ep *ep,
 	}
 
 	trace_mtu3_gadget_queue(mreq);
+	new = &mreq->list;
+	head = &mep->req_list;
+	if(new == head->prev) {
+		dev_info(mtu->dev, "req double add error,%s %s EP%d(%s), req=%p, maxp=%d, len#%d\n",
+			__func__, mep->is_in ? "TX" : "RX", mreq->epnum, ep->name,
+			mreq, ep->maxpacket, mreq->request.length);
+		ret = -EINVAL;
+		goto error;
+	}
 	list_add_tail(&mreq->list, &mep->req_list);
 	mtu3_insert_gpd(mep, mreq);
 	mtu3_qmu_resume(mep);
@@ -670,6 +681,7 @@ static int mtu3_gadget_set_self_powered(struct usb_gadget *gadget,
 	return 0;
 }
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 static void mtu3_gadget_set_ready(struct usb_gadget *gadget)
 {
 	struct mtu3 *mtu = gadget_to_mtu3(gadget);
@@ -681,6 +693,7 @@ static void mtu3_gadget_set_ready(struct usb_gadget *gadget)
 
 	mtu->is_gadget_ready = 1;
 }
+#endif
 
 static void mtu3_nuke_all_ep(struct mtu3 *mtu)
 {
@@ -698,7 +711,7 @@ static int mtu3_gadget_pullup(struct usb_gadget *gadget, int is_on)
 	struct mtu3 *mtu = gadget_to_mtu3(gadget);
 	unsigned long flags;
 
-	dev_dbg(mtu->dev, "%s (%s) for %sactive device\n", __func__,
+	dev_info(mtu->dev, "%s (%s) for %sactive device\n", __func__,
 		is_on ? "on" : "off", mtu->is_active ? "" : "in");
 
 	pm_runtime_get_sync(mtu->dev);
@@ -722,7 +735,11 @@ static int mtu3_gadget_pullup(struct usb_gadget *gadget, int is_on)
 	spin_unlock_irqrestore(&mtu->lock, flags);
 
 	if (!mtu->is_gadget_ready && is_on)
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		mtu->is_gadget_ready = 1;
+#else
 		mtu3_gadget_set_ready(gadget);
+#endif
 
 	pm_runtime_put(mtu->dev);
 
@@ -741,7 +758,7 @@ static int mtu3_gadget_start(struct usb_gadget *gadget,
 		return -EBUSY;
 	}
 
-	dev_dbg(mtu->dev, "bind driver %s\n", driver->function);
+	dev_info(mtu->dev, "bind driver %s\n", driver->function);
 	pm_runtime_get_sync(mtu->dev);
 
 	spin_lock_irqsave(&mtu->lock, flags);
@@ -797,7 +814,7 @@ static int mtu3_gadget_stop(struct usb_gadget *g)
 	struct mtu3 *mtu = gadget_to_mtu3(g);
 	unsigned long flags;
 
-	dev_dbg(mtu->dev, "%s\n", __func__);
+	dev_info(mtu->dev, "%s\n", __func__);
 
 	spin_lock_irqsave(&mtu->lock, flags);
 
@@ -973,7 +990,7 @@ void mtu3_gadget_disconnect(struct mtu3 *mtu)
 {
 	struct usb_gadget_driver *driver;
 
-	dev_dbg(mtu->dev, "gadget DISCONNECT\n");
+	dev_info(mtu->dev, "gadget DISCONNECT, USB_STATE=DISCONNECTED\n");
 	if (mtu->async_callbacks && mtu->gadget_driver &&
 			mtu->gadget_driver->disconnect) {
 		driver = mtu->gadget_driver;

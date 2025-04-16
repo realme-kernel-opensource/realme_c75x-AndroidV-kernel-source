@@ -18,7 +18,6 @@
 #include "ufs-mediatek-mimic.h"
 #include "ufs-mediatek-priv.h"
 
-
 #define MPHY_RX_LANE0_INDEX 4
 #define MPHY_RX_LANE1_INDEX 5
 #define EYEMON_GET 1

@@ -31,6 +31,10 @@
 #define DLPT_NOTIFY_FAST_UISOC		30
 #define	DLPT_VOLT_MIN			3100
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
+#define OPLUS_FEATURE_CHG_BASIC
+#endif
+
 struct reg_t {
 	unsigned int addr;
 	unsigned int mask;
@@ -280,10 +284,15 @@ static int dlpt_get_rgs_chrdet(void)
 
 static struct power_supply *get_mtk_gauge_psy(void)
 {
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	static struct power_supply *psy;
+#else
+	static struct power_supply *psy_mtk;
+#endif
 	union power_supply_propval prop;
 	int ret;
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	if (!psy) {
 		psy = power_supply_get_by_name("mtk-gauge");
 		if (!psy) {
@@ -296,6 +305,23 @@ static struct power_supply *get_mtk_gauge_psy(void)
 					&prop);
 	if (!ret && prop.intval == 0)
 		return psy; /* gauge enabled */
+#else
+	if (!psy_mtk) {
+		psy_mtk = power_supply_get_by_name("battery");
+		if (!psy_mtk) {
+			pr_err("%s get psy_mtk is not rdy!\n", __func__);
+			return NULL;
+		}
+	}
+
+	ret = power_supply_get_property(psy_mtk, POWER_SUPPLY_PROP_PRESENT, &prop);
+	pr_info("%s:%d get prop is %d,ret is %d\n", __func__, __LINE__, prop.intval, ret);
+	if (!ret && prop.intval == 0) {
+		pr_err("%s get power supply present failed!\n", __func__);
+		return psy_mtk;
+	}
+
+#endif
 	return NULL;
 }
 

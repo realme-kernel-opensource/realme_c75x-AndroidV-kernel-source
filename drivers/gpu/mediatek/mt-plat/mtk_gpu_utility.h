@@ -112,6 +112,23 @@ void mtk_notify_gpu_power_change(int power_on);
 bool mtk_notify_gpu_freq_change(u32 clk_idx, u32 gpufreq);
 
 void mtk_gpu_fence_debug_dump(int fd, int pid, int type, int timeouts);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_POWERMODEL)
+struct oplus_gpu_state {
+	int topfreq;
+	int top_realvolt;
+	int stackfreq;
+	int stack_realvolt;
+	u64 shadercore_status;
+};
+bool oplus_pm_gpu_state_notify_enable(bool enable);
+bool oplus_mali_gpu_state_notify_enable(bool enable);
+bool oplus_get_mali_shadercore_state(u64 *shadercore_state);
+bool oplus_mali_notify_shadercore_state_change(u64 shadercore_state);
+bool oplus_notify_pm_gpustate_change(struct oplus_gpu_state *state);
+#endif
+
+
 #ifdef __cplusplus
 }
 #endif

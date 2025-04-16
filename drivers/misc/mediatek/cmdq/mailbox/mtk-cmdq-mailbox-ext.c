@@ -5190,7 +5190,7 @@ s32 cmdq_pkt_set_capability(struct cmdq_pkt *pkt)
 	} else if (pkt->dev) {
 		cmdq = dev_get_drvdata(pkt->dev);
 	} else {
-		cmdq_err("cl/dev is null");
+
 		return -EINVAL;
 	}
 

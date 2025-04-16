@@ -224,7 +224,6 @@ enum {
 #define SRAM_VMM_EFUSE_HIGH	(SRAM_BASE + 4 * (372))
 #define SRAM_VMM_EFUSE_LOW	(SRAM_BASE + 4 * (373))
 
-
 /* VDISP : SRAM_OBJ_CNT * SRAM_REC_CNT = 24 */
 #define SRAM_REC_CNT_VDISP	(SRAM_BASE + 4 * (374))
 #define SRAM_VDISP_SEC(y)	(SRAM_BASE + 4 * (375 + SRAM_OBJ_CNT * (y) + 0))

@@ -30,6 +30,10 @@
 #ifdef SHARE_WROT_SRAM
 #include "cmdq_helper_ext.h"
 #endif
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+#include "oplus_adfr.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR  */
+
 
 #define MAX_ENTER_IDLE_RSZ_RATIO 300
 #define MTK_DRM_CPU_MAX_COUNT 8
@@ -235,8 +239,8 @@ static void mtk_drm_idlemgr_get_private_data(struct drm_crtc *crtc,
 
 	switch (priv->data->mmsys_id) {
 	case MMSYS_MT6991:
-		data->cpu_mask = 0xf; //cpu0~3
-		data->cpu_freq = 1000000; // 1Ghz
+		data->cpu_mask = 0; //disable
+		data->cpu_freq = 0; //disable
 		data->cpu_dma_latency = PM_QOS_DEFAULT_VALUE;
 		data->vblank_async = false;
 		data->hw_async = true;
@@ -1055,6 +1059,10 @@ static void mtk_drm_idlemgr_enter_idle_nolock(struct drm_crtc *crtc)
 	if (!output_comp)
 		return;
 
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	oplus_adfr_handle_idle_mode(crtc, true);
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR  */
+
 	mode = mtk_dsi_is_cmd_mode(output_comp);
 	idle_interval = mtk_drm_get_idle_check_interval(crtc);
 	CRTC_MMP_EVENT_START(index, enter_idle, mode, idle_interval);
@@ -1387,11 +1395,15 @@ void mtk_drm_idlemgr_kick(const char *source, struct drm_crtc *crtc,
 			local_clock() - idlemgr_ctx->enter_idle_ts);
 		if (mtk_crtc->esd_ctx)
 			atomic_set(&mtk_crtc->esd_ctx->target_time, 0);
-		if (mtk_crtc->enabled && need_lock)
-			mtk_vidle_user_power_keep(DISP_VIDLE_USER_HSIDLE);
+
+		if (mtk_crtc->enabled)
+			mtk_vidle_user_power_keep(DISP_VIDLE_USER_HSIDLE);	/* no polling for this user */
+
 		mtk_drm_idlemgr_leave_idle_nolock(crtc);
-		if (mtk_crtc->enabled && need_lock)
+
+		if (mtk_crtc->enabled)
 			mtk_vidle_user_power_release(DISP_VIDLE_USER_HSIDLE);
+
 		idlemgr_ctx->is_idle = 0;
 		/* wake up idlemgr process to monitor next idle state */
 		wake_up_interruptible(&idlemgr->idlemgr_wq);
@@ -1749,7 +1761,7 @@ static int mtk_drm_idlemgr_monitor_thread(void *data)
 			/* enter idle state */
 			if (!vblank || atomic_read(&vblank->refcount) == 0) {
 				DDPINFO("[LP] enter idle\n");
-				mtk_vidle_user_power_keep(DISP_VIDLE_USER_HSIDLE);
+				mtk_vidle_user_power_keep(DISP_VIDLE_USER_HSIDLE);	/* no polling for this user */
 				mtk_drm_idlemgr_enter_idle_nolock(crtc);
 				mtk_vidle_user_power_release(DISP_VIDLE_USER_HSIDLE);
 				idlemgr_ctx->is_idle = 1;
@@ -1945,10 +1957,20 @@ static void mtk_drm_idlemgr_disable_crtc(struct drm_crtc *crtc)
 	mtk_drm_idlemgr_perf_detail_check(perf_detail, crtc,
 				"polling_dsi", 1, perf_string, false);
 
-	/* 0. Waiting CLIENT_DSI_CFG/CLIENT_CFG thread done */
+	/* 0. Waiting CLIENT_DSI_CFG/CLIENT_CHECK_T/CLIENT_CFG thread done */
 	if (mtk_crtc->gce_obj.client[CLIENT_DSI_CFG])
 		mtk_crtc_pkt_create(&cmdq_handle1, crtc,
 			mtk_crtc->gce_obj.client[CLIENT_DSI_CFG]);
+
+	if (cmdq_handle1) {
+		cmdq_pkt_flush(cmdq_handle1);
+		cmdq_pkt_destroy(cmdq_handle1);
+		cmdq_handle1 = NULL;
+	}
+
+	if (mtk_crtc->gce_obj.client[CLIENT_CHECK_T])
+		mtk_crtc_pkt_create(&cmdq_handle1, crtc,
+			mtk_crtc->gce_obj.client[CLIENT_CHECK_T]);
 
 	if (cmdq_handle1) {
 		cmdq_pkt_flush(cmdq_handle1);

@@ -66,7 +66,7 @@
 static unsigned int mmprofile_meta_datacookie = 1;
 #else
 /* min buffer size is 0x400*32byte = 32KB */
-#define MMPROFILE_DEFAULT_BUFFER_SIZE 0x400
+#define MMPROFILE_DEFAULT_BUFFER_SIZE 0xC000
 #define MMPROFILE_MIN_META_BUFFER_SIZE 0x0
 #define MMPROFILE_DEFAULT_META_BUFFER_SIZE 0x0
 #define MMPROFILE_MAX_META_BUFFER_SIZE 0x0
@@ -2442,10 +2442,12 @@ static int mmprofile_probe(void)
 		    proc_create("start", 0600,
 				g_p_proc_dir,
 				&mmprofile_proc_start_fops);
+		/*#ifdef OPLUS_FETURE_DISPLAY*/
 		g_p_proc_buffer =
-		    proc_create("buffer", 0400,
+		    proc_create("buffer", 0404,
 				g_p_proc_dir,
 				&mmprofile_proc_buffer_fops);
+		/*#endif*/
 		g_p_proc_global =
 		    proc_create("global", 0400,
 				g_p_proc_dir,

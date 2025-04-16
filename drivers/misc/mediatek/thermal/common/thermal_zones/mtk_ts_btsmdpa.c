@@ -462,8 +462,8 @@ static struct BTSMDPA_TEMPERATURE BTSMDPA_Temperature_Table7[] = {
 	{120, 2916},
 	{125, 2522}
 };
-
-
+extern int get_pa_ntc_volt(void);
+extern bool is_kthread_get_adc(void);
 /* convert register to temperature  */
 static __s32 mtkts_btsmdpa_thermistor_conver_temp(__s32 Res)
 {
@@ -612,18 +612,23 @@ static int get_hw_btsmdpa_temp(void)
 #endif
 
 #if IS_ENABLED(CONFIG_DEVICE_MODULES_MEDIATEK_MT6577_AUXADC)
-	if (IS_ERR_OR_NULL(thermistor_ch1)) {
+#ifndef CONFIG_OPLUS_TEMP_NTC
+	if (!is_kthread_get_adc()) {
+#endif
+		if (IS_ERR_OR_NULL(thermistor_ch1)) {
 		mtkts_btsmdpa_dprintk("invalid thermistor_ch1:0x%p\n", thermistor_ch1);
 		return ret;
+		}
+		ret = iio_read_channel_processed(thermistor_ch1, &val);
+		if (ret < 0) {
+			mtkts_btsmdpa_printk("Busy/Timeout, IIO ch read failed %d\n", ret);
+			return ret;
+#ifndef CONFIG_OPLUS_TEMP_NTC
+		}
+	} else {
+		val = get_pa_ntc_volt();
+#endif
 	}
-	ret = iio_read_channel_processed(thermistor_ch1, &val);
-	mtkts_btsmdpa_dprintk("%s val=%d\n", __func__, val);
-
-	if (ret < 0) {
-		mtkts_btsmdpa_printk("IIO channel read failed %d\n", ret);
-		return ret;
-	}
-
 #ifdef APPLY_PRECISE_BTS_TEMP
 	ret = val * 100;
 #else

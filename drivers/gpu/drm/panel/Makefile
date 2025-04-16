@@ -5,6 +5,64 @@ ifneq ($(filter y m, $(CONFIG_MTK_MME_SUPPORT)),)
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/mme
 endif
 
+#ifdef OPLUS_FEATURE_DISPLAY
+$(info build oplus_panel.ko, CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE=$(CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE))
+ifneq ($(filter $(CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE), y m),)
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_MAINLINE
+endif # filter CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE end
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/mtk-interconnect \
+		-I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/slbc \
+		-I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include/mt-plat \
+		-I$(DEVICE_MODULES_PATH)/drivers/gpu/drm/mediatek/dpc \
+		-I$(DEVICE_MODULES_PATH)/drivers/gpu/drm/mediatek/mediatek_v2 \
+		-I$(DEVICE_MODULES_PATH)/drivers/gpu/drm/oplus \
+		-I$(DEVICE_MODULES_PATH)/drivers/gpu/drm/oplus/oplus_panel \
+		-I$(DEVICE_MODULES_PATH)/drivers/gpu/drm/oplus/bias
+#build oplus display feature config
+ccflags-y += -DOPLUS_FEATURE_DISPLAY
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_ADFR
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_HPWM
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_APOLLO
+#build oplus_panel.ko
+obj-$(CONFIG_DRM_PANEL_AC178_P_3_A0004_DSI_CMD) += ../oplus/oplus_panel/panel_ac178_p_3_a0004_dsi_cmd.o
+obj-$(CONFIG_DRM_OPLUS_DISPLAY_DSI_PRIMARY) += ../oplus/oplus_panel/oplus_display_dsi_primary.o
+obj-$(CONFIG_DRM_AC138_P_3_A0004_CMD_PANEL) += ../oplus/oplus_panel/ac138_p_3_a0004_cmd_panel.o
+obj-$(CONFIG_DRM_AC112_P_7_A0009_FHD_DSI_VDO) += ../oplus/oplus_panel/ac112_p_7_a0009_fhd_dsi_vdo.o
+obj-$(CONFIG_DRM_AC112_P_D_A0010_FHD_DSI_VDO) += ../oplus/oplus_panel/ac112_p_d_a0010_fhd_dsi_vdo.o
+obj-$(CONFIG_DRM_AC112_P_D_A0010_FHD_DSI_VDO) += ../oplus/oplus_panel/ac114_p_3_a0013_hd_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_AC144_P_7_A0012_CMD_PANEL) += ../oplus/oplus_panel/ac144_p_7_a0012_cmd_panel.o
+obj-$(CONFIG_DRM_PANEL_AC144_P_3_A0004_CMD_PANEL) += ../oplus/oplus_panel/ac144_p_3_a0004_cmd_panel.o
+obj-$(CONFIG_DRM_PANEL_OPLUS22277_BOE_NT37705_FHD_DSI_CMD) += ../oplus/oplus_panel/oplus22277_boe_nt37705_fhd_dsi_cmd.o
+obj-$(CONFIG_DRM_PANEL_AC168_P_B_A0012_CMD_PANEL) += ../oplus/oplus_panel/ac168_p_B_a0012_cmd_panel.o
+obj-$(CONFIG_DRM_PANEL_AC168_P_3_A0004_CMD_PANEL) += ../oplus/oplus_panel/ac168_p_3_a0004_cmd_panel.o
+obj-$(CONFIG_DRM_PANEL_AC102_P_7_A0007_DSC_VIDEO_MODE_PANEL) += ../oplus/oplus_panel/AC102_P_7_A0007_dsc_video_mode_panel.o
+obj-$(CONFIG_DRM_PANEL_AC102_P_3_A0010_FHDP_DSI_VDO) += ../oplus/oplus_panel/AC102_P_3_A0010_fhdp_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS22291_HLT_ILI9883C_DPHY_VDO) += ../oplus/oplus_panel/oplus22291_ili9883c_hlt_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS22291_TRULY_TD4160_DPHY_VDO) += ../oplus/oplus_panel/oplus22291_td4160_truly_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS22291_BOE_ILI9883C_DPHY_VDO) += ../oplus/oplus_panel/oplus22291_ili9883c_boe_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS23053_BOE_ILI9883C_DPHY_VDO) += ../oplus/oplus_panel/oplus23053_ili9883c_boe_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS23053_TRULY_TD4160_DPHY_VDO) += ../oplus/oplus_panel/oplus23053_td4160_truly_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS23687_SAMSUNG_AMS667FK02_S6E8FC3_FHDP_DSI_VDO) += ../oplus/oplus_panel/oplus23687_samsung_ams667fk02_s6e8fc3_fhdp_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS22610_SAMSUNG_AMS643AG01_1080P_DSI_CMD) += ../oplus/oplus_panel/oplus22610_samsung_ams643ag01_1080p_dsi_cmd.o
+obj-$(CONFIG_DRM_PANEL_OPLUS22629_TIANMA_ILI7838A_T7_PLUS_FHD_DSI_CMD) += ../oplus/oplus_panel/oplus22629_tianma_ili7838a_t7_plus_fhd_dsi_cmd.o
+obj-$(CONFIG_DRM_PANEL_OPLUS22612_TIANMA_ILI7838A_FHD_DSI_CMD) += ../oplus/oplus_panel/oplus22612_tianma_ili7838a_fhd_dsi_cmd.o
+obj-$(CONFIG_DRM_PANEL_OPLUS22612_TIANMA_ILI7838A_T7_PLUS_FHD_DSI_CMD) += ../oplus/oplus_panel/oplus22612_tianma_ili7838a_t7_plus_fhd_dsi_cmd.o
+obj-$(CONFIG_DRM_PANEL_ILI7807S_XXX_FHD_DSI_VDO_DPHY) += ../oplus/oplus_panel/ili7807s_xxx_fhd_dsi_vdo_dphy.o
+obj-$(CONFIG_DRM_PANEL_ILI7807S_JDI_FHD_DSI_VDO_DPHY) += ../oplus/oplus_panel/ili7807s_jdi_fhd_dsi_vdo_dphy.o
+obj-$(CONFIG_DRM_PANEL_NT36672C_TM_FHD_DSI_VDO_DPHY) += ../oplus/oplus_panel/nt36672c_tm_fhd_dsi_vdo_dphy.o
+obj-$(CONFIG_DRM_PANEL_OPLUS23703_ILI9883C_DJ_HDP_DSI_VDO) += ../oplus/oplus_panel/oplus23703_ili9883c_dj_hdp_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS23703_ILI9883C_HKC_HDP_DSI_VDO) += ../oplus/oplus_panel/oplus23703_ili9883c_hkc_hdp_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS23703_FT8057P_XX_HDP_DSI_VDO) += ../oplus/oplus_panel/oplus23703_ft8057p_xx_hdp_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS24713_NT36528B_TXDHKC_HDP_DSI_VDO) += ../oplus/oplus_panel/oplus24713_nt36528b_txdhkc_hdp_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS24713_ILI9883C_XXCSOT_HDP_DSI_VDO) += ../oplus/oplus_panel/oplus24713_ili9883c_xxcsot_hdp_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS24700_ILI7807S_TM_FHDP_DSI_VDO) += ../oplus/oplus_panel/oplus24700_ili7807s_tm_fhdp_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS24700_TD4377_CSOT_FHDP_DSI_VDO) += ../oplus/oplus_panel/oplus24700_td4377_csot_fhdp_dsi_vdo.o
+obj-$(CONFIG_DRM_PANEL_OPLUS24700_TD4376B_CSOT_FHDP_DSI_VDO) += ../oplus/oplus_panel/oplus24700_td4376b_csot_fhdp_dsi_vdo.o
+
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 obj-$(CONFIG_DRM_PANEL_NOVATEK_NT35695B_VDO) += panel-nt35695b-auo-vdo.o
 obj-$(CONFIG_DRM_PANEL_NOVATEK_NT35695B_CMD) += panel-nt35695b-auo-cmd.o
 obj-$(CONFIG_DRM_PANEL_NOVATEK_NT36672A_VDO) += panel-nt36672a-rt4801-vdo.o
@@ -90,6 +148,7 @@ obj-$(CONFIG_DRM_PANEL_SERDES) += panel-serdes-max96789.o bridge-serdes-max96789
 obj-$(CONFIG_DRM_PANEL_NT37707_C2V_ARP) += panel-nt37707-c2v-arp.o
 obj-$(CONFIG_DRM_PANEL_NT51021H_WUXGA_VDO_BOE) += panel-nt51021h-wuxga-vdo-boe.o
 obj-$(CONFIG_DRM_PANEL_N11A_42_02_0A_DSC_VDO) += panel-n11a-42-02-0a-dsc-vdo.o
+obj-$(CONFIG_OCP2130_I2C) += ../oplus/bias/ocp2130_drv.o
 mediatek-drm-gateic-y := mtk_drm_panel_i2c.o \
 		  mtk_drm_gateic_rt4801h.o \
 		  mtk_drm_gateic_rt4831a.o \

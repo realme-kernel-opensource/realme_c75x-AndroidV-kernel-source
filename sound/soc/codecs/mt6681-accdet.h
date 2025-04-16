@@ -118,6 +118,10 @@ struct head_dts_data {
 	unsigned int moisture_comp_vref2;
 	unsigned int moisture_use_ext_res;
 	unsigned int accdet_irq_gpio_enable;
+#if IS_ENABLED(CONFIG_SND_SOC_OPLUS_TYPEC_SWITCH)
+	/* 2024/1/8, add for supporting type-c headphone detect bypass */
+	unsigned int headset_eint0_disable;
+#endif
 	unsigned int app_wakelock_time;
 };
 enum {
@@ -139,6 +143,9 @@ struct tag_chipid {
 	u32 hw_ver;
 	u32 sw_ver;
 };
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+extern void oplus_set_feedback_ctrl_val(unsigned int ctrl_val);
+#endif
 /* just be called by audio module for DC trim */
 extern void mt6681_accdet_late_init(unsigned long data);
 extern const struct file_operations *accdet_get_fops(void);

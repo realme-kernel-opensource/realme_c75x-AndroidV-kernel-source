@@ -705,6 +705,11 @@ uint32_t pd_get_cable_current_limit(struct pd_port *pd_port)
 
 bool pd_is_cable_communication_available(struct pd_port *pd_port)
 {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* add for pd_svooc charger*/
+	if (pd_port->power_role == PD_ROLE_SINK)
+		return false;
+#endif
 	return !!pd_port->vconn_role;
 }
 

@@ -52,22 +52,26 @@ int irq_aee;
 module_param(irq_aee, int, 0644);
 int mminfra_floor;
 module_param(mminfra_floor, int, 0644);
-
 int post_vlp_delay = 60;
 module_param(post_vlp_delay, int, 0644);
-
 u32 dump_begin;
 module_param(dump_begin, uint, 0644);
 u32 dump_lines = 40;
 module_param(dump_lines, uint, 0644);
-
-int debug_force_wait;
-module_param(debug_force_wait, int, 0644);
 u32 debug_presz;
 module_param(debug_presz, uint, 0644);
 
+/* 0: normal, 1: force wait, 2: force skip */
+int wfe_prete = 2;
+module_param(wfe_prete, int, 0644);
+
 static void __iomem *dpc_base;
 static struct mtk_dpc *g_priv;
+
+/* debug emi violation */
+static void __iomem *mmpc_emi_req;
+static void __iomem *mmpc_ddrsrc_req;
+static void __iomem *spm_ddr_emi_req;
 
 static const char trace_buf_mml_on[] = "C|-65536|MML1_power|1\n";
 static const char trace_buf_mml_off[] = "C|-65536|MML1_power|0\n";
@@ -324,8 +328,11 @@ static inline int dpc_pm_ctrl(bool en)
 		}
 
 		/* read dummy register to make sure it's ready to use */
-		if (g_priv->mminfra_dummy && (readl(g_priv->mminfra_dummy) == 0))
+		if (g_priv->mminfra_dummy && (readl(g_priv->mminfra_dummy) == 0)) {
 			DPCAEE("read mminfra dummy failed");
+			pm_runtime_put_sync(g_priv->pd_dev);
+			return -2;
+		}
 
 		/* disable devapc power check false alarm, */
 		/* DPC address is bound by power of disp1 on 6989 */
@@ -377,8 +384,10 @@ static int mtk_disp_wait_pwr_ack(const enum mtk_dpc_subsys subsys)
 	/* by dpc */
 	ret = readl_poll_timeout_atomic(dpc_base + g_priv->mtcmos_cfg[subsys].cfg + 0x8,
 					value, value & BIT(20), 1, 200);
-	if (ret < 0)
+	if (ret < 0) {
 		DPCERR("wait subsys(%d) power on timeout", subsys);
+		dump_stack();
+	}
 
 	return ret;
 }
@@ -494,6 +503,7 @@ static void dpc_dt_set_update(u16 dt, u32 us)
 	dpc_dt_set(dt, us);
 }
 
+extern int is_ac180;
 static void dpc_duration_update(const u32 us)
 {
 	u32 presz = DPC2_DT_PRESZ;
@@ -519,7 +529,14 @@ static void dpc_duration_update(const u32 us)
 		dpc_dt_set_update(76, us - presz - DPC2_DT_MTCMOS - DPC2_DT_DSION);
 
 		/* wa for 90 hz extra dsi te */
-		dpc_dt_set_update(7, us == 11111 ? 3000 : DPC2_DT_POSTSZ);
+/* #ifdef OPLUS_FEATURE_DISPLAY */
+		pr_err("dpc_duration_update ac180=%d\n",is_ac180);
+		if (is_ac180 == 1) {
+			dpc_dt_set_update(7, us == 11111 ? 3200 : DPC2_DT_POSTSZ);
+		} else {
+			dpc_dt_set_update(7, us >= 11111 ? 3000 : DPC2_DT_POSTSZ);
+		}
+/* #endif */
 	} else {
 		dpc_dt_set_update( 1, us - DT_OVL_OFFSET);
 		dpc_dt_set_update( 5, us - DT_DISP1_OFFSET);
@@ -1243,8 +1260,14 @@ irqreturn_t mt6991_irq_handler(int irq, void *dev_id)
 	}
 
 	/* Panel TE */
-	if (disp_sta & BIT(18))
-		dpc_mmp(prete, MMPROFILE_FLAG_PULSE, 0, 0);
+	if (disp_sta & BIT(18)) {
+		if (mmpc_emi_req && mmpc_ddrsrc_req && spm_ddr_emi_req)
+			dpc_mmp(prete, MMPROFILE_FLAG_PULSE,
+				(readl(mmpc_emi_req) & 0xffff) << 16 | (readl(mmpc_ddrsrc_req) & 0xffff),
+				readl(spm_ddr_emi_req));
+		else
+			dpc_mmp(prete, MMPROFILE_FLAG_PULSE, 0, 0);
+	}
 	if (disp_sta & BIT(9)) {
 		u32 presz = DPC2_DT_PRESZ;
 
@@ -1415,6 +1438,10 @@ static int dpc_res_init(struct mtk_dpc *priv)
 		/* power check by dpc, instead of subsys_pm */
 		for (subsys = 0; subsys < DPC_SUBSYS_CNT; subsys++)
 			priv->mtcmos_cfg[subsys].chk_pa = priv->dpc_pa + priv->mtcmos_cfg[subsys].cfg + 0x8;
+
+		mmpc_emi_req = ioremap(0x31b5103c, 0x4);
+		mmpc_ddrsrc_req = ioremap(0x31b5101c, 0x4);
+		spm_ddr_emi_req = ioremap(0x1c00488c, 0x4);
 	}
 
 	return IS_ERR_OR_NULL(dpc_base);
@@ -1531,17 +1558,17 @@ static int dpc_vidle_power_keep(const enum mtk_vidle_voter_user _user)
 
 	switch (user) {
 	case DISP_VIDLE_USER_MML1:
-		mtk_disp_wait_pwr_ack(DPC_SUBSYS_MML1);
+		ret = mtk_disp_wait_pwr_ack(DPC_SUBSYS_MML1);
 		break;
 	case DISP_VIDLE_USER_MML0:
-		mtk_disp_wait_pwr_ack(DPC_SUBSYS_MML0);
+		ret = mtk_disp_wait_pwr_ack(DPC_SUBSYS_MML0);
 		break;
 	case DISP_VIDLE_USER_PQ:
 		if (g_priv->root_dev) {
 			/* can only be used by USER_PQ, as it will not be used within ISR */
 			pm_runtime_get_sync(g_priv->root_dev);
 			mtk_disp_wait_pwr_ack(DPC_SUBSYS_DIS1);
-			mtk_disp_wait_pwr_ack(DPC_SUBSYS_DIS0);
+			ret = mtk_disp_wait_pwr_ack(DPC_SUBSYS_DIS0);
 			pm_runtime_put_sync(g_priv->root_dev);
 		} else
 			udelay(post_vlp_delay);
@@ -1554,7 +1581,7 @@ static int dpc_vidle_power_keep(const enum mtk_vidle_voter_user _user)
 		mtk_disp_wait_pwr_ack(DPC_SUBSYS_DIS1);
 		mtk_disp_wait_pwr_ack(DPC_SUBSYS_DIS0);
 		mtk_disp_wait_pwr_ack(DPC_SUBSYS_OVL0);
-		mtk_disp_wait_pwr_ack(DPC_SUBSYS_OVL1);
+		ret = mtk_disp_wait_pwr_ack(DPC_SUBSYS_OVL1);
 		break;
 	default:
 		udelay(post_vlp_delay);
@@ -1580,8 +1607,15 @@ static void dpc_vidle_power_release(const enum mtk_vidle_voter_user user)
 
 static void dpc_clear_wfe_event(struct cmdq_pkt *pkt, enum mtk_vidle_voter_user user, int event)
 {
-	if (!has_cap(DPC_CAP_MTCMOS) && !debug_force_wait)
+	switch (wfe_prete) {
+	case 1:
+		break;
+	case 2:
 		return;
+	default:
+		if (!has_cap(DPC_CAP_MTCMOS))
+			return;
+	}
 
 	cmdq_pkt_clear_event(pkt, event);
 	cmdq_pkt_wfe(pkt, event);
@@ -2102,6 +2136,7 @@ static int mtk_dpc_probe(struct platform_device *pdev)
 		pm_runtime_irq_safe(priv->pd_dev);
 	}
 
+
 	if (of_find_property(dev->of_node, "root-dev", NULL)) {
 		struct device_node *node = of_parse_phandle(dev->of_node, "root-dev", 0);
 		struct platform_device *pdev = NULL;
@@ -2118,7 +2153,6 @@ static int mtk_dpc_probe(struct platform_device *pdev)
 		priv->vidle_mask = 0;
 	}
 #endif
-
 	ret = dpc_res_init(priv);
 	if (ret) {
 		DPCERR("res init failed:%d", ret);
@@ -2172,8 +2206,8 @@ static int mtk_dpc_probe(struct platform_device *pdev)
 		/* set vdisp level */
 		// dpc_dvfs_set(DPC_SUBSYS_DISP, 0x4, true);
 
-		/* set channel bw for larb0 HRT READ */
-		dpc_ch_bw_set(DPC_SUBSYS_DISP, 2, 363 * 16);
+		/* set channel bw for the first HRT_READ layer, which is exdma3 currently */
+		dpc_ch_bw_set(DPC_SUBSYS_DISP, 6, 363 * 16);
 
 		/* set total HRT bw */
 		dpc_hrt_bw_set(DPC_SUBSYS_DISP, 363 * priv->total_hrt_unit, true);

@@ -23,6 +23,13 @@
 #define SGEN_TIE_CH1_KCONTROL_NAME "Audio_SineGen_Tie_Ch1"
 #define SGEN_TIE_CH2_KCONTROL_NAME "Audio_SineGen_Tie_Ch2"
 
+#if IS_ENABLED(CONFIG_OPLUS_MTK_AUDIO_EXT)
+/* Add for FTM test*/
+static const char *const mt6991_sgen_spktest_str[] = {
+	"Off", "On"
+};
+#endif
+
 static const char *const mt6991_sgen_mode_str[] = {
 	"I0I1",   "I2",     "I3I4",   "I5I6",
 	"I7I8",   "I9",     "I10I11", "I12I13",
@@ -267,6 +274,47 @@ static int mt6991_sgen_set(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+
+#if IS_ENABLED(CONFIG_OPLUS_MTK_AUDIO_EXT)
+/* Add for FTM test*/
+static int mt6991_sgen_spktest_get(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+
+
+static int mt6991_sgen_spktest_set(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
+	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
+	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
+	int mode;
+
+	dev_info(afe->dev, "%s(),enter\n",__func__);
+
+	if (ucontrol->value.enumerated.item[0] >= e->items)
+		return -EINVAL;
+
+	mode = ucontrol->value.integer.value[0];
+
+	dev_info(afe->dev, "%s(), mode %d\n",__func__, mode);
+
+
+	if (mode > 0) {
+		regmap_write(afe->regmap, AFE_SINEGEN_CON0, 0x04d04e04);
+		regmap_write(afe->regmap, AFE_SINEGEN_CON1, 0xA010);
+	} else {
+		/* disable sgen */
+		regmap_write(afe->regmap, AFE_SINEGEN_CON0, 0);
+		regmap_write(afe->regmap, AFE_SINEGEN_CON1, 0xFF);
+	}
+
+	return 0;
+}
+#endif
+
 static int mt6991_sgen_tmp_get(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
@@ -465,6 +513,11 @@ static const struct soc_enum mt6991_afe_sgen_enum[] = {
 			    mt6991_sgen_tie_str),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mt6991_sgen_mode_str),
 			    mt6991_sgen_mode_str),
+#if IS_ENABLED(CONFIG_OPLUS_MTK_AUDIO_EXT)
+/* Add for FTM test*/
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mt6991_sgen_spktest_str),
+				mt6991_sgen_spktest_str),
+#endif
 };
 
 static const struct snd_kcontrol_new mt6991_afe_sgen_controls[] = {
@@ -488,6 +541,11 @@ static const struct snd_kcontrol_new mt6991_afe_sgen_controls[] = {
 		   FREQ_DIV_CH1_SFT, FREQ_DIV_CH1_MASK, 0),
 	SOC_SINGLE("Audio_SineGen_Freq_Div_Ch2", AFE_SINEGEN_CON0,
 		   FREQ_DIV_CH2_SFT, FREQ_DIV_CH2_MASK, 0),
+#if IS_ENABLED(CONFIG_OPLUS_MTK_AUDIO_EXT)
+/* Add for FTM test*/
+	SOC_ENUM_EXT("Audio_SineGen_spktest", mt6991_afe_sgen_enum[7],
+			 mt6991_sgen_spktest_get, mt6991_sgen_spktest_set),
+#endif
 };
 
 /* usb call control */
@@ -525,7 +583,19 @@ static int mt6991_usb_echo_ref_set(struct snd_kcontrol *kcontrol,
 	if (!dl_memif->substream) {
 		dev_info(afe->dev, "%s(), dl_memif->substream == NULL\n",
 			 __func__);
-		return -EINVAL;
+		if (afe_priv->usb_call_echo_ref_reallocate) {
+			dev_info(afe->dev, "%s(), free area: %p\n", __func__,
+				 dl_memif->dma_area);
+			/* free previous allocate */
+			dma_free_coherent(afe->dev,
+					  dl_memif->dma_bytes,
+					  dl_memif->dma_area,
+					  dl_memif->dma_addr);
+
+			afe_priv->usb_call_echo_ref_reallocate = false;
+			afe_priv->usb_call_echo_ref_enable = false;
+		}
+		return 0;
 	}
 
 	if (!ul_memif->substream) {
@@ -552,6 +622,9 @@ static int mt6991_usb_echo_ref_set(struct snd_kcontrol *kcontrol,
 			unsigned char *dma_area;
 
 			if (afe_priv->usb_call_echo_ref_reallocate) {
+				dev_info(afe->dev, "%s(), free area: %p\n",
+					 __func__,
+					 dl_memif->dma_area);
 				/* free previous allocate */
 				dma_free_coherent(afe->dev,
 						  dl_memif->dma_bytes,
@@ -616,6 +689,8 @@ static int mt6991_usb_echo_ref_set(struct snd_kcontrol *kcontrol,
 		mtk_memif_set_disable(afe, ul_id);
 
 		if (afe_priv->usb_call_echo_ref_reallocate) {
+			dev_info(afe->dev, "%s(), free area: %p\n", __func__,
+				 dl_memif->dma_area);
 			/* free previous allocate */
 			dma_free_coherent(afe->dev,
 					  dl_memif->dma_bytes,

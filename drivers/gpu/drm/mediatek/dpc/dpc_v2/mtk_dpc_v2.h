@@ -44,7 +44,9 @@
 #define DT_7  (DT_OFF1 + DT_PRE_DISP1_OFF)
 #define DT_13 (DT_OFF1 + DT_PRE_MMINFRA_OFF)
 
-#define DPC2_DT_PRESZ 600
+/* #ifdef OPLUS_FEATURE_DISPLAY */ /* old value 300 */
+#define DPC2_DT_PRESZ 1100
+/* #endif */
 #define DPC2_DT_POSTSZ 500
 #define DPC2_DT_MTCMOS 100
 #define DPC2_DT_INFRA 300

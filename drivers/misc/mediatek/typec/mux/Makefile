@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0
 
 ccflags-y += -I$(srctree)/drivers/usb/typec
+ifeq ($(CONFIG_OPLUS_PD_EXT_SUPPORT),)
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/typec/tcpc/inc
+else
+ccflags-y += -I$(srctree)/drivers/power/oplus/pd_ext/inc
+endif
 CFLAGS_pi3dpx1205a.o += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/typec/mux
 
 obj-$(CONFIG_MTK_USB_TYPEC_MUX) += mux_switch.o

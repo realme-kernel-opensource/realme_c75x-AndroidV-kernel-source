@@ -5,7 +5,12 @@
 
 #include <linux/clk.h>
 
-#include "seninf_clk.h"
+#if defined(MTK_PLATFORM_MT6833)
+#include "../../mt6853/seninf_mt6833/seninf_clk.h"
+#else
+#include "../../mt6853/seninf_mt6877/seninf_clk.h"
+#endif
+
 #include "platform_common.h"
 
 

@@ -31,8 +31,16 @@
 #else
 #include "mtk_energy_model/v1/energy_model.h"
 #endif
+
+#ifdef CONFIG_OPLUS_SCHED_GROUP_OPT
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_group.h>
+#endif
+
 #define DEFAULT_GRP_THRESHOLD	20
 #define DEFAULT_GRP_THRESHOLD_UTIL	460
+/* #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BENCHOPT) */
+extern void cpuqos_v3_register_cgroup_colocate_ops(int (*set)(int, int), int (*get)(int));
+/* #endif CONFIG_OPLUS_FEATURE_BENCHOPT */
 static struct grp *related_thread_groups[GROUP_ID_RECORD_MAX];
 static u32 GP_mode = GP_MODE_0;
 static int grp_threshold[GROUP_ID_RECORD_MAX] = {DEFAULT_GRP_THRESHOLD, DEFAULT_GRP_THRESHOLD,
@@ -379,6 +387,10 @@ static void group_android_rvh_cpu_cgroup_online(void *unused, struct cgroup_subs
 		return;
 
 	group_update_tg_pointer(css);
+
+#ifdef CONFIG_OPLUS_SCHED_GROUP_OPT
+	oplus_update_tg_map(css);
+#endif
 }
 
 static void group_android_rvh_cpu_cgroup_attach(void *unused,
@@ -571,6 +583,9 @@ void group_init(void)
 
 	group_init_tg_pointers();
 	group_register_hooks();
+/* #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BENCHOPT) */
+	cpuqos_v3_register_cgroup_colocate_ops(group_set_cgroup_colocate, group_get_cgroup_colocate);
+/* #endif CONFIG_OPLUS_FEATURE_BENCHOPT */
 }
 
 void group_exit(void)

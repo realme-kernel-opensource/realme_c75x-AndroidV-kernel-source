@@ -24,6 +24,7 @@
 #include "kd_camera_feature.h"
 #include "kd_imgsensor_define.h"
 #include "kd_imgsensor_api.h"
+#include <soc/oplus/boot/oplus_project.h>
 
 /*=============================================================
  * Macro
@@ -760,7 +761,10 @@ struct thermal_cooling_device *cdev, unsigned long state)
 		/* To trigger data abort to reset the system
 		 * for thermal protection.
 		 */
-		BUG_ON(1);
+		if (get_eng_version() != HIGH_TEMP_AGING)
+			BUG_ON(1);
+		else
+			pr_info("%s should reset but bypass\n", __func__);
 	}
 	return 0;
 }

@@ -24,6 +24,10 @@ imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_sensor_list.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/seninf_clk.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/seninf.o
 
+imgsensor_isp6s-objs += ../OplusImgsensor/imgsensor_eeprom.o
+imgsensor_isp6s-objs += ../OplusImgsensor/imgsensor_hwcfg_custom.o
+imgsensor_isp6s-objs += ../OplusImgsensor/imgsensor_hwcfg_mt6853.o
+
 IMG_COMMON_CODE_PATH := ../common/$(COMMON_VERSION)
 include $(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION)/n3d_fsync/Makefile
 

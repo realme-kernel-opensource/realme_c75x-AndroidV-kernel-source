@@ -2076,6 +2076,10 @@ static int __init thermal_monitor_init(void)
 		mtkts_bts_init();
 		mtkts_btsmdpa_init();
 		mtktspa_init();
+		mtk_AP_init();
+		mtk_PA_init();
+		oplus_tempntc_init();
+		mtk_charger_ts_init();
 		mtk_mdm_txpwr_init();
 		mtktscharger_init();
 		mtk_imgs_init();
@@ -2111,6 +2115,10 @@ static void __exit thermal_monitor_exit(void)
 	mtktsbattery_exit();
 	mtkts_bts_exit();
 	mtkts_btsmdpa_exit();
+	mtk_AP_exit();
+	mtk_PA_exit();
+	oplus_tempntc_exit();
+	mtk_charger_ts_exit();
 	mtk_mdm_txpwr_exit();
 	mtktscharger_exit();
 	mtk_imgs_exit();

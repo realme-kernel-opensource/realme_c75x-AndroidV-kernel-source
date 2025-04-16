@@ -1,5 +1,22 @@
 subdir-ccflags-y += -Wno-error
 
+#ifdef OPLUS_FEATURE_DISPLAY
+$(info build mediatek_drm.ko, CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE=$(CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE))
+ifneq ($(filter $(CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE), y m),)
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_MAINLINE
+endif # filter CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE end
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/gpu/drm/mediatek/mediatek_v2 \
+		-I$(DEVICE_MODULES_PATH)/drivers/gpu/drm/oplus
+#build oplus display feature config
+ccflags-y += -DOPLUS_FEATURE_DISPLAY
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_TEMP_COMPENSATION
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_ADFR
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_HPWM
+ccflags-y += -DOPLUS_FEATURE_DISPLAY_APOLLO
+ccflags-y += -DOPLUS_TRACKPOINT_REPORT
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 CFLAGS_mtk_layering_rule_base.o := -I$(DEVICE_MODULES_PATH)/drivers/gpu/drm/mediatek/mediatek_v2
 
 mediatek-drm-y := mtk_drm_drv.o \
@@ -82,10 +99,8 @@ ifeq ($(CONFIG_DRM_MEDIATEK_DEBUG_FS),y)
 mediatek-drm-y += mtk_drm_debugfs.o
 endif
 
-ifeq ($(strip $(MGK_INTERNAL)),true)
 ccflags-y += -DDISP_STASH_ENABLE
 ccflags-y += -DDRM_PARTIAL_UPDATE
-endif
 
 ifeq ($(CONFIG_DRM_MEDIATEK_DPTX_AUTO),y)
 mediatek-drm-y += mtk_drm_dp/mtk_drm_dp_intf.o \
@@ -223,3 +238,24 @@ ccflags-y += -DDISP_MDP_COLOR_ON
 
 subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include/
 subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include/mt-plat/
+
+#ifdef OPLUS_FEATURE_DISPLAY
+#build oplus file into mediatek_drm.ko
+mediatek-drm-y += ../../oplus/oplus_display_interface.o \
+		../../oplus/oplus_display_utils.o \
+		../../oplus/oplus_display_sysfs_attrs.o \
+		../../oplus/oplus_display_power.o \
+		../../oplus/oplus_display_device_ioctl.o \
+		../../oplus/oplus_display_dc.o \
+		../../oplus/oplus_display_onscreenfingerprint.o \
+		../../oplus/oplus_display_device.o \
+		../../oplus/oplus_adfr.o \
+		../../oplus/oplus_display_temp_compensation.o \
+		../../oplus/oplus_display_pwm.o \
+		../../oplus/oplus_display_debug.o \
+		../../oplus/oplus_display_apollo_brightness.o \
+		../../oplus/oplus_dsi_panel_cmd.o \
+		../../oplus/oplus_dsi_display_config.o \
+		../../oplus/oplus_dsi_display_parser.o \
+		../../oplus/oplus_display_trackpoint_report.o
+#endif /* OPLUS_FEATURE_DISPLAY */

@@ -10,6 +10,12 @@
 #include "eas_plus.h"
 #include "eas_trace.h"
 #include "vip.h"
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_common.h>
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+#include <../kernel/oplus_cpu/sched/frame_boost/frame_group.h>
+#endif
 #include <mt-plat/mtk_irq_mon.h>
 
 bool skip_hiIRQ_enable;
@@ -74,6 +80,12 @@ static inline unsigned long task_util_est(struct task_struct *p)
 static inline bool should_honor_rt_sync(struct rq *rq, struct task_struct *p,
 					bool sync)
 {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	fbg_skip_rt_sync(rq, p, &sync);
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	sa_skip_rt_sync(rq, p, &sync);
+#endif
 	/*
 	 * If the waker is CFS, then an RT sync wakeup would preempt the waker
 	 * and force it to run for a likely small time after the RT wakee is
@@ -462,12 +474,21 @@ static void mtk_rt_energy_aware_wake_cpu(struct task_struct *p,
 			if (cpu_high_irqload(cpu))
 				continue;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+			if (!fbg_rt_task_fits_capacity(p, cpu))
+                                continue;
+#endif
+
 			/* RT task skips cpu that runs latency_sensitive or vip tasks */
 #if IS_ENABLED(CONFIG_MTK_SCHED_VIP_TASK)
 			cpu_has_lt = is_task_latency_sensitive(cpu_rq(cpu)->curr)
 				||  sum_num_vip_in_cpu(cpu);
 #else
 			cpu_has_lt = is_task_latency_sensitive(cpu_rq(cpu)->curr);
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+			cpu_has_lt = cpu_has_lt || sa_rt_skip_ux_cpu(cpu);
 #endif
 
 			/*

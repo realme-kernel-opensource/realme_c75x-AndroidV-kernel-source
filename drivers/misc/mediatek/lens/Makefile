@@ -4,4 +4,4 @@
 
 obj-y   += vcm/
 obj-y   += ois/
-obj-y   += tof/
+obj-m   += tof/

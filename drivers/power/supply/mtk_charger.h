@@ -7,6 +7,9 @@
 #define __MTK_CHARGER_H
 
 #include <linux/alarmtimer.h>
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#include <linux/version.h>
+#endif
 #include "charger_class.h"
 #include "adapter_class.h"
 #include "mtk_charger_algorithm_class.h"
@@ -98,6 +101,49 @@ struct charger_data;
 
 #define USB_CURRENT_MASK 0x80000000
 #define UNLIMIT_CURRENT_MASK 0x10000000
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+
+#define APPLE_1_0A_CHARGER_CURRENT          650000
+#define APPLE_2_1A_CHARGER_CURRENT          800000
+#define TA_AC_CHARGING_CURRENT              3000000
+#define USB_UNLIMITED_CURRENT               2000000
+
+#define SC_BATTERY_SIZE 3000
+#define SC_CV_TIME 3600
+#define SC_CURRENT_LIMIT 2000
+
+/* bif */
+#define BIF_THRESHOLD1 4250000  /* UV */
+#define BIF_THRESHOLD2 4300000  /* UV */
+#define BIF_CV_UNDER_THRESHOLD2 4450000 /* UV */
+#define BIF_CV BATTERY_CV /* UV */
+
+/* dual charger */
+#define TA_AC_MASTER_CHARGING_CURRENT 1500000
+#define TA_AC_SLAVE_CHARGING_CURRENT 1500000
+#define SLAVE_MIVR_DIFF 100000
+
+/* Battery Temperature Protection */
+#define MIN_CHARGE_TEMP  0
+#define MIN_CHARGE_TEMP_PLUS_X_DEGREE   6
+#define MAX_CHARGE_TEMP  50
+#define MAX_CHARGE_TEMP_MINUS_X_DEGREE  47
+
+/* cable measurement impedance */
+#define CABLE_IMP_THRESHOLD 699
+#define VBAT_CABLE_IMP_THRESHOLD 3900000 /* uV */
+
+/* slave charger */
+#define CHG2_EFF 90
+
+#define R_SENSE 56 /* mohm */
+
+#define MAX_CHARGING_TIME (12 * 60 * 60) /* 12 hours */
+
+#define DEFAULT_BC12_CHARGER 0 /* MAIN_CHARGER */
+
+#endif  /* OPLUS_FEATURE_CHG_BASIC */
 
 enum bat_temp_state_enum {
 	BAT_TEMP_LOW = 0,
@@ -261,7 +307,17 @@ struct charger_custom_data {
 	int min_charger_voltage_1;
 	int min_charger_voltage_2;
 	int max_dmivr_charger_current;
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	int dual_charger_support;
+	int step1_time;
+	int step1_current_ma;
+	int step2_time;
+	int step2_current_ma;
+	int step3_current_ma;
+	int pd_not_support;
+	int qc_not_support;
+	bool vbus_exist;
+#endif
 };
 
 struct charger_data {
@@ -278,7 +334,39 @@ struct charger_data {
 	int input_current_limit_by_aicl;
 	int junction_temp_min;
 	int junction_temp_max;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+        int chargeric_temp_volt;
+        int chargeric_temp;
+        int subboard_temp;
+        int battery_temp;
+#endif
 };
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+typedef enum {
+	NTC_BATTERY,
+	NTC_CHARGER_IC,
+	NTC_SUB_BOARD,
+}NTC_TYPE;
+
+struct temp_param {
+	__s32 bts_temp;
+	__s32 temperature_r;
+};
+
+struct ntc_temp{
+	NTC_TYPE e_ntc_type;
+	int i_tap_over_critical_low;
+	int i_rap_pull_up_r;
+	int i_rap_pull_up_voltage;
+	int i_tap_min;
+	int i_tap_max;
+	unsigned int i_25c_volt;
+	unsigned int ui_dwvolt;
+	struct temp_param *pst_temp_table;
+	int i_table_size;
+};
+#endif
 
 enum chg_data_idx_enum {
 	CHG1_SETTING,
@@ -453,6 +541,31 @@ struct mtk_charger {
 
 	bool enable_dynamic_mivr;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	bool charging_limit_current_fm;
+	int usb_charging_limit_current_fm;
+	int ac_charging_limit_current_fm;
+	bool charging_call_mode;
+	bool charging_lcd_on_mode;
+	bool charge_timeout;
+	bool chrdet_state;
+	bool wd0_detect;
+	bool wait_hard_reset_complete;
+	int boost_en_gpio;
+	int ext1_otg_en_gpio;
+	int ext2_otg_en_gpio;
+	bool pd_reset;
+	struct pinctrl          *ext1_otg_en_pinctrl;
+	struct pinctrl_state    *ext1_otg_en_active;
+	struct pinctrl_state    *ext1_otg_en_sleep;
+	struct pinctrl          *ext2_otg_en_pinctrl;
+	struct pinctrl_state    *ext2_otg_en_active;
+	struct pinctrl_state    *ext2_otg_en_sleep;
+	struct pinctrl          *boost_en_pinctrl;
+	struct pinctrl_state    *boost_en_active;
+	struct pinctrl_state    *boost_en_sleep;
+#endif /* OPLUS_FEATURE_CHG_BASIC */
+
 	/* fast charging algo support indicator */
 	bool enable_fast_charging_indicator;
 	unsigned int fast_charging_indicator;
@@ -495,7 +608,83 @@ struct mtk_charger {
 	int protocol_state;
 	int ta_capability;
 	int wait_times;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct iio_channel      *subboard_temp_chan;
+	struct iio_channel      *chargeric_temp_chan;
+	struct iio_channel      *charger_id_chan;
+	struct iio_channel      *usb_temp_v_l_chan;
+	struct iio_channel      *usb_temp_v_r_chan;
+	struct iio_channel      *usbcon_temp_chan;
+	struct iio_channel      *batcon_temp_chan;
+	struct iio_channel      *batid_temp_chan;
+	struct delayed_work	step_charging_work;
+	struct delayed_work	check_charger_out_work;
+	struct delayed_work	ccdetect_work;
+	struct delayed_work	usbtemp_recover_work;
+	struct delayed_work	wd0_detect_work;
+	int step_status;
+	int step_status_pre;
+	int step_cnt;
+	int step_chg_current;
+	int chargeric_temp_volt;
+	int chargeric_temp;
+	int usbcon_temp;
+	int batcon_temp;
+	bool usbtemp_lowvbus_detect;
+	bool support_ntc_01c_precision;
+	int i_sub_board_temp;
+	int i_battery_temp;
+
+	struct adapter_power_cap srccap;
+	int ccdetect_gpio;
+	int ccdetect_irq;
+	struct pinctrl_state *ccdetect_active;
+	struct pinctrl_state *ccdetect_sleep;
+	struct pinctrl *pinctrl;
+	bool in_good_connect;
+/*add for charge*/
+	struct oplus_chg_mod *usb_ocm;
+	struct tcpc_device *tcpc;
+	struct notifier_block pd_nb;
+	int pd_type;
+	int otg_current_limit;
+#endif
 };
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+struct mtk_oplus_chg_interface
+{
+	void (*track_record_chg_type_info)(void);
+	bool (*wake_update_work)(void);
+	int (*is_single_batt_svooc)(void);
+	void (*set_otg_online)(bool online);
+
+	/* VOOC related */
+	void (*set_charger_type_unknown)(void);
+	void (*clear_chargerid_info)(void);
+	void (*set_chargerid_switch_val)(int value);
+	bool (*get_fastchg_started)(void);
+	void (*reset_fastchg_after_usbout)(void);
+
+	void (*chg_check_break)(int value);
+	int (*track_check_wired_charging_break)(int value);
+	int (*get_adapter_update_status)(void);
+	bool (*get_fastchg_to_normal)(void);
+	bool (*get_fastchg_to_warm)(void);
+	int (*get_support_type)(void);
+	int (*get_mmi_status)(void);
+	int (*hv_flashled_plug)(int plug);
+	/* VOOCPHY related */
+	int (*get_voocphy_support)(void);
+
+	int (*get_ui_soc)(void);
+	int (*get_notify_flag)(void);
+	int (*show_vooc_logo_ornot)(void);
+	int (*get_prop_status)(void);
+	bool(*check_chip_is_null)(void);
+
+};
+#endif
 
 static inline int mtk_chg_alg_notify_call(struct mtk_charger *info,
 					  enum chg_alg_notifier_events evt,
@@ -540,7 +729,11 @@ extern int get_charger_input_current(struct mtk_charger *info,
 	struct charger_device *chg);
 extern int get_charger_zcv(struct mtk_charger *info,
 	struct charger_device *chg);
-extern void _wake_up_charger(struct mtk_charger *info);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
+void _wake_up_charger(struct charger_manager *info);
+#else
+static void _wake_up_charger(struct mtk_charger *info) __attribute__((unused));
+#endif
 extern int mtk_adapter_switch_control(struct mtk_charger *info);
 extern int mtk_selected_adapter_ready(struct mtk_charger *info);
 extern int mtk_adapter_protocol_init(struct mtk_charger *info);

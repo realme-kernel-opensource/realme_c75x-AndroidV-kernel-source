@@ -206,7 +206,7 @@ void timesync_filter_exit(struct timesync_filter *filter)
 
 void timesync_start(void)
 {
-	mod_timer(&timesync_timer, jiffies + msecs_to_jiffies(10000));
+	mod_timer(&timesync_timer, jiffies + msecs_to_jiffies(2000));
 }
 
 void timesync_stop(void)

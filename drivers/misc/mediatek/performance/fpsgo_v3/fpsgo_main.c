@@ -280,6 +280,10 @@ static void fpsgo_notifier_wq_cb_qudeq(int qudeq,
 					cur_pid);
 			fpsgo_ctrl2comp_enqueue_end(cur_pid, curr_ts,
 					id, sf_buf_id);
+#if IS_ENABLED(CONFIG_MTK_ENGINE_COOLER_DISABLE)
+#else
+			game_engine_cooler_set_last_sleep_duration(cur_pid);
+#endif
 		}
 		break;
 	case 0:
@@ -1494,6 +1498,10 @@ static int __init fpsgo_init(void)
 	magt2fpsgo_notify_target_fps_fp = fpsgo_notify_magt_target_fps;
 	magt2fpsgo_notify_dep_list_fp = fpsgo_notify_magt_dep_list;
 	magt2fpsgo_get_fpsgo_frame_info = get_fpsgo_frame_info;
+#endif
+#if IS_ENABLED(CONFIG_MTK_ENGINE_COOLER_DISABLE)
+#else
+	game2fpsgo_get_fpsgo_frame_info = get_fpsgo_frame_info;
 #endif
 	fpsgo_get_lr_pair_fp = fpsgo_get_lr_pair;
 	fpsgo_set_rl_l2q_enable_fp = fpsgo_set_rl_l2q_enable;

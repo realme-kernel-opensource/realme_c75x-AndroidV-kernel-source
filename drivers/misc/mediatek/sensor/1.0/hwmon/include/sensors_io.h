@@ -212,8 +212,15 @@ struct compat_biometric_threshold {
 
 #define SAR 0x91
 #define SAR_IOCTL_INIT _IOW(SAR, 0x01, int)
+
+#ifdef CONFIG_OPLUS_FEATURE_SENSOR
+#define SAR_IOCTL_READ_SENSORDATA _IOR(SAR, 0x02, struct SAR_SENSOR_DATA)
+#define SAR_IOCTL_GET_CALI  _IOR(SAR, 0x03, struct SAR_SENSOR_DATA)
+#else
 #define SAR_IOCTL_READ_SENSORDATA _IOR(SAR, 0x02, struct SENSOR_DATA)
 #define SAR_IOCTL_GET_CALI  _IOR(SAR, 0x03, struct SENSOR_DATA)
+#endif
+
 #define SAR_IOCTL_ENABLE_CALI _IO(SAR, 0x04)
 #if IS_ENABLED(CONFIG_COMPAT)
 #define COMPAT_SAR_IOCTL_INIT _IOW(SAR, 0x01, compat_int_t)
@@ -221,5 +228,17 @@ struct compat_biometric_threshold {
 #define COMPAT_SAR_IOCTL_GET_CALI _IOR(SAR, 0x03, struct SENSOR_DATA)
 #define COMPAT_SAR_IOCTL_ENABLE_CALI _IO(SAR, 0x04)
 #endif
+
+#define REAR_ALS 0x92
+#define REAR_ALS_SET_ALS_MODE _IOW(REAR_ALS, 0x01, int)
+#define REAR_ALS_GET_ALS_RAW_DATA _IOR(REAR_ALS, 0x02, int)
+
+/*-------------------MTK add-------------------------------------------*/
+#define REAR_ALS_IOCTL_CLR_CALI _IOW(REAR_ALS, 0x03, int)
+#define REAR_ALS_IOCTL_GET_CALI _IOR(REAR_ALS, 0x04, int)
+#define REAR_ALS_IOCTL_SET_CALI _IOW(REAR_ALS, 0x05, int)
+#define REAR_ALS_ENABLE_CALI _IO(REAR_ALS, 0x06)
+#define REAR_ALS_IOCTL_ALS_GET_CALI _IOW(REAR_ALS, 0x07, int)
+#define REAR_ALS_SET_CALI _IOW(REAR_ALS, 0x08, int)
 
 #endif

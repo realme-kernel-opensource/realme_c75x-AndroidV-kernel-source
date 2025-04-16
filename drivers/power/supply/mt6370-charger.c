@@ -26,6 +26,18 @@
 #include "mtk_charger.h"
 #include "mtk_chg_type_det.h"
 
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define OPLUS_CHG_UPDATE_INIT_DELAY round_jiffies_relative(msecs_to_jiffies(3000))
+#if defined(CONFIG_OPLUS_CHARGER_MTK6781)
+extern int odm_select_bat_ntc_support;
+#define ODM_SPACE_B_33W	21684
+#define ODM_SPACE_D_18W	21690
+extern int oplus_chg_enable_hvdcp_detect(void);
+extern void oplus_chg_set_charger_type_unknown(void);
+#endif
+#endif /* OPLUS_FEATURE_CHG_BASIC */
+
 static bool dbg_log_en = true;
 module_param(dbg_log_en, bool, 0644);
 #define mt_dbg(dev, fmt, ...) \
@@ -419,6 +431,14 @@ struct mt6370_priv {
 	u8 irq_flag[MT6370_CHG_IRQIDX_MAX];
 	wait_queue_head_t wait_queue;
 	atomic_t bc12_cnt;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	atomic_t suspended;
+#ifdef CONFIG_OPLUS_HVDCP_SUPPORT
+  	struct delayed_work hvdcp_result_check_work;
+  	enum power_supply_type hvdcp_type;
+#endif
+  	int pre_charger_type;
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 };
 
 struct mt6370_chg_platform_data {
@@ -469,6 +489,11 @@ static struct mt6370_chg_platform_data mt6370_default_chg_desc = {
 	.chgdev_name = "primary_chg",
 	.ls_dev_name = "primary_load_switch",
 };
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct mt6370_priv *oplus_chg_data = NULL;
+#endif
+
 enum mt6370_usb_status {
 	MT6370_USB_STAT_NO_VBUS = 0,
 	MT6370_USB_STAT_VBUS_FLOW_IS_UNDER_GOING,
@@ -1067,6 +1092,12 @@ static void mt6370_chg_bc12_work_func(struct work_struct *work)
 		priv->psy_usb_type == POWER_SUPPLY_USB_TYPE_SDP &&
 		(chip_vid == RT5081_VENDOR_ID ||
 		 chip_vid == MT6370_VENDOR_ID)) {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		dev_err(priv->dev,
+				"%s: __mt6370_chgdet_handler:priv->bc12_cnt:%d\n",
+				__func__, atomic_read(&priv->bc12_cnt));
+		priv->pre_charger_type = priv->psy_usb_type;
+#endif
 		ret = mt6370_bc12_workaround(priv);
 		/* Workaround success, wait for next event */
 		if (ret >= 0) {
@@ -2292,7 +2323,12 @@ static int mt6370_kick_wdt(struct charger_device *chgdev)
 	int ret = 0;
 	enum mt6370_charging_status chg_status;
 	struct mt6370_priv *priv = charger_get_data(chgdev);
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+  	if (oplus_chg_data) {
+  		if (atomic_read(&oplus_chg_data->suspended) == 1)
+  			return -1;
+  	}
+#endif
 	ret = mt6370_get_charging_status(priv, &chg_status);
 
 	return ret;
@@ -3338,7 +3374,6 @@ static struct charger_ops mt6370_chg_ops = {
 	.get_ibus_adc = mt6370_get_ibus,
 	.get_vbus_adc = mt6370_get_vbus,
 	.get_ibat_adc = mt6370_get_ibat,
-
 	/* Event */
 	.event = mt6370_do_event,
 };
@@ -3875,7 +3910,7 @@ static ssize_t shipping_mode_store(struct device *dev,
 	}
 	/* disable chg auto sensing */
 	mt6370_enable_hidden_mode(priv, true);
-	ret = mt6370_clr_bits(priv, MT6370_REG_CHGHIDDENCTRL15, 0x01);
+	ret = regmap_clear_bits(priv->regmap, MT6370_REG_CHGHIDDENCTRL15, 0x01);
 	if (ret < 0) {
 		dev_notice(dev, "set auto sensing disable\n");
 		return ret;
@@ -3883,15 +3918,95 @@ static ssize_t shipping_mode_store(struct device *dev,
 	mt6370_enable_hidden_mode(priv, false);
 	mdelay(50);
 	/* enter shipping mode */
-	ret = mt6370_set_bits(priv, MT6370_REG_CHG_CTRL2, 0x80);
+	ret = regmap_set_bits(priv->regmap, MT6370_REG_CHG_CTRL2, 0x80);
 	if (ret < 0) {
 		dev_notice(dev, "enter shipping mode\n");
 		return ret;
 	}
 	return count;
 }
-
 static const DEVICE_ATTR_WO(shipping_mode);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#ifdef CONFIG_OPLUS_HVDCP_SUPPORT
+static void mt6370_hvdcp_result_check_work(struct work_struct *work)
+{
+	int ret = 0;
+
+	printk("mt6370_hvdcp_result_check_work:start\n");
+	regmap_read(oplus_chg_data->regmap, MT6370_REG_DEVICE_TYPE, &ret);
+	dev_info(oplus_chg_data->dev, "%s: reg[0x%02X] = 0x%02X\n",
+				__func__, MT6370_REG_DEVICE_TYPE, ret);
+	if(ret & BIT(3)){
+		oplus_chg_data->hvdcp_type = POWER_SUPPLY_TYPE_USB_DCP;  //shobhit POWER_SUPPLY_TYPE_USB_HVDCP
+		ret = regmap_update_bits(oplus_chg_data->regmap, MT6370_REG_QCCTRL1, 0x70, 0x10);
+		if (ret < 0)
+			dev_err(oplus_chg_data->dev, "%s: fail to write dpdm_ctrl\n", __func__);
+		dev_info(oplus_chg_data->dev, "%s_HVDCP detected\n",__func__);
+	}
+	/* run again */
+	schedule_delayed_work(&oplus_chg_data->hvdcp_result_check_work, OPLUS_CHG_UPDATE_INIT_DELAY);
+}
+
+enum power_supply_type mt6370_get_hvdcp_type(void)
+{
+	if (!oplus_chg_data) {
+		printk(KERN_ERR "%s NULL\n", __func__);
+		return POWER_SUPPLY_TYPE_USB_DCP;
+	}
+	return oplus_chg_data->hvdcp_type;
+}
+
+void mt6370_enable_hvdcp_detect(void)
+{
+	int ret = 0;
+
+	if (!oplus_chg_data) {
+		printk(KERN_ERR "%s oplus_chg_data NULL\n", __func__);
+		return ;
+	}
+
+	dev_err(oplus_chg_data->dev, "%s\n", __func__);
+
+#if defined(CONFIG_OPLUS_CHARGER_MTK6781)
+	if(odm_select_bat_ntc_support == ODM_SPACE_D_18W){//18W
+		goto enable_hvdcp;
+	} else {
+		dev_err(oplus_chg_data->dev, "%s:is SpaceB 33W is not set QC\n", __func__);
+		return ;
+	}
+enable_hvdcp:
+#endif
+
+	regmap_read(oplus_chg_data->regmap, MT6370_REG_QCCTRL1, &ret);
+	dev_info(oplus_chg_data->dev, "%s: reg[0x%02X] = 0x%02X\n",
+				__func__, MT6370_REG_QCCTRL1, ret);
+	if (ret < 0) {
+		dev_err(oplus_chg_data->dev, "%s: read chg type fail\n", __func__);
+		return ;
+	} else if((ret & 0x80) == 0x00) {
+		/* enable hvdcp detect */
+		ret = regmap_write(oplus_chg_data->regmap, MT6370_REG_QCCTRL1, 0x80);
+		msleep(20);
+		/* start bc1.2 again */
+		mt6370_bc12_workaround(oplus_chg_data);
+		msleep(1000);
+
+		regmap_read(oplus_chg_data->regmap,MT6370_REG_QCCTRL1, &ret);
+		dev_info(oplus_chg_data->dev, "%s: reg[0x%02X] = 0x%02X\n",
+				__func__, MT6370_REG_QCCTRL1, ret);
+		regmap_read(oplus_chg_data->regmap, MT6370_REG_DEVICE_TYPE, &ret);
+		dev_info(oplus_chg_data->dev, "%s: reg[0x%02X] = 0x%02X\n",
+			__func__, MT6370_REG_DEVICE_TYPE, ret);
+
+		schedule_delayed_work(&oplus_chg_data->hvdcp_result_check_work, OPLUS_CHG_UPDATE_INIT_DELAY);
+	}
+}
+EXPORT_SYMBOL(mt6370_enable_hvdcp_detect);
+#endif /* CONFIG_OPLUS_HVDCP_SUPPORT */
+#endif /* OPLUS_FEATURE_CHG_BASIC */
+
+
 static int mt6370_chg_init_setting(struct mt6370_priv *priv)
 {
 	int ret;
@@ -4119,9 +4234,39 @@ static int mt6370_chg_probe(struct platform_device *pdev)
 		dev_notice(&pdev->dev, "create shipping attr fail\n");
 		return ret;
 	}
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	oplus_chg_data = priv;
+	atomic_set(&oplus_chg_data->suspended, 0);
+
+#ifdef CONFIG_OPLUS_HVDCP_SUPPORT
+	INIT_DELAYED_WORK(&oplus_chg_data->hvdcp_result_check_work, mt6370_hvdcp_result_check_work);
+	oplus_chg_data->hvdcp_type = POWER_SUPPLY_TYPE_UNKNOWN;
+#endif
+#endif
 	dev_info(dev, "%s probe successfully\n", __func__);
 	return 0;
 }
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static int mt6370_pmu_chg_resume(struct device *dev)
+{
+	if (oplus_chg_data)
+		atomic_set(&oplus_chg_data->suspended, 0);
+	return 0;
+}
+
+static int mt6370_pmu_chg_suspend(struct device *dev)
+{
+	if (oplus_chg_data)
+		atomic_set(&oplus_chg_data->suspended, 1);
+	return 0;
+}
+
+static const struct dev_pm_ops mt6370_pmu_chg_pm_ops = {
+	.resume		= mt6370_pmu_chg_resume,
+	.suspend	= mt6370_pmu_chg_suspend,
+};
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 static int mt6375_chg_remove(struct platform_device *pdev)
 {
@@ -4144,6 +4289,9 @@ static struct platform_driver mt6370_chg_driver = {
 	.driver = {
 		.name = "mt6370-charger",
 		.of_match_table = mt6370_chg_of_match,
+	#ifdef OPLUS_FEATURE_CHG_BASIC
+		.pm = &mt6370_pmu_chg_pm_ops,
+	#endif
 	},
 	.remove = mt6375_chg_remove,
 };

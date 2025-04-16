@@ -34,6 +34,18 @@ config DMABUF_HEAPS_DEBUG
 	  If you want use it, say Y if you are not using GKI
 	  say m and add ko into your system for GKI.
 
+config OPLUS_FEATURE_MM_BOOSTPOOL
+	tristate "Oplus DMA-BUF heaps boost-pool library "
+	depends on DEVICE_MODULES_DMABUF_HEAPS_SYSTEM
+	help
+	  Choose this option to enable the DMA-BUF heaps boost-pool library.
+
+config OPLUS_FEATURE_MM_OSVELTE
+	tristate "osvelte driver"
+	default n
+	help
+	  This driver used for memory debugging.
+
 config DMABUF_LEGACY_TEST
 	tristate "DMA-BUF test legacy"
 	help

@@ -119,6 +119,7 @@ static void ged_eb_work_cb(struct work_struct *psWork)
 			trace_tracing_mark_write(5566, "unreasonable_top_freq",psEBEvent->freq_new);
 		} else {
 			mtk_notify_gpu_freq_change(0, psEBEvent->freq_new);
+
 			if (eb_policy_dts_flag && ged_get_cur_oppidx() < ged_get_min_stack_oppidx()
 				&& dcs_get_cur_core_num() != dcs_get_max_core_num()) {
 				mutex_lock(&gsPolicyLock);
@@ -143,6 +144,15 @@ static void ged_eb_work_cb(struct work_struct *psWork)
 		//trace_tracing_mark_write(5566, "eb_loading_low", loading_low);
 		//trace_tracing_mark_write(5566, "eb_margin", eb_margin);
 		//trace_tracing_mark_write(5566, "eb_policy_state", eb_policy_state);
+		break;
+	case GPUFDVFS_IPI_EVENT_IDX_CHANGE:
+		// check psEBEvent->idx[0], psEBEvent->idx[1] value
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_POWERMODEL)
+		ged_eb_clk_change_notify(psEBEvent->freq_new);
+#endif
+		trace_tracing_mark_write(5566, "idx_enable", 1);
+
 		break;
 	default:
 		GPUFDVFS_LOGI("(%d), cmd: %d wrong!!!\n", __LINE__, psEBEvent->cmd);
@@ -459,9 +469,15 @@ static int fast_dvfs_eb_event_handler(unsigned int id, void *prdata, void *data,
 				ged_eb_sysram_debug_data_write();
 			}
 			return 0;
+		} else if (cmd == GPUFDVFS_IPI_EVENT_CLK_CHANGE) {
+			psEBEvent->freq_new = ((struct fastdvfs_event_data *)data)->u.set_para.arg[0];
+			psEBEvent->idx[0] = 0;
+			psEBEvent->idx[1] = 0;
+		} else if (cmd == GPUFDVFS_IPI_EVENT_IDX_CHANGE) {
+			psEBEvent->freq_new = 0;
+			psEBEvent->idx[0] = ((struct fastdvfs_event_data *)data)->u.set_para.arg[0];
+			psEBEvent->idx[1] = ((struct fastdvfs_event_data *)data)->u.set_para.arg[1];
 		}
-
-		psEBEvent->freq_new = ((struct fastdvfs_event_data *)data)->u.set_para.arg[0];
 
 		/* irq cmd type (from gpueb) */
 		psEBEvent->cmd = ((struct fastdvfs_event_data *)data)->cmd;
@@ -894,6 +910,21 @@ void mtk_gpueb_set_power_state(enum ged_gpu_power_state power_state)
 		GED_LOGD("%s err:%d\n", __func__, ret);
 }
 EXPORT_SYMBOL(mtk_gpueb_set_power_state);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_POWERMODEL)
+int oplus_gpueb_dvfs_notify_oppidx(int enable) {
+	int ret = 0;
+
+	if (enable != OPLUSCMD_DISABLE_OPPIDX_EVENT && enable != OPLUSCMD_ENABLE_OPPIDX_EVENT) {
+		pr_err("invalid config for oppidx notification");
+		return -EINVAL;
+	}
+
+	ret = mtk_gpueb_sysram_write(SYSRAM_GPU_EB_USE_IDX_NOTIFY, enable);
+	return ret;
+}
+EXPORT_SYMBOL(oplus_gpueb_dvfs_notify_oppidx);
+#endif
 
 unsigned int is_fdvfs_enable(void)
 {

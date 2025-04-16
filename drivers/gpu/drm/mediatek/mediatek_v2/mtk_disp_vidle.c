@@ -49,7 +49,6 @@ struct mtk_disp_vidle {
 	enum mtk_dpc_version dpc_version;
 	enum mtk_vdisp_version vdisp_version;
 	int pm_ret_crtc;	/* for DISP_VIDLE_USER_CRTC only, already locked by crtc_lock */
-	int pm_ret_pq;		/* for DISP_VIDLE_USER_PQ only, protected by pq ref cnt */
 };
 
 static struct mtk_disp_vidle vidle_data = {
@@ -173,7 +172,7 @@ int mtk_vidle_force_power_ctrl_by_cpu(bool power_on)
 	if (disp_dpc_driver.dpc_vidle_power_keep == NULL ||
 		disp_dpc_driver.dpc_vidle_power_release == NULL) {
 		DDPMSG("%s power_on[%d] power ctrl api is null\n", __func__, power_on);
-		return -1;
+		return ret;
 	}
 
 	if (power_on)
@@ -220,16 +219,23 @@ int mtk_vidle_user_power_keep_v2(enum mtk_vidle_voter_user user)
 		return 0;
 
 	if (atomic_read(&vidle_data.drm_priv->kernel_pm.status) == KERNEL_SHUTDOWN)
-		pm_ret = -1;
-	else if (atomic_read(&vidle_data.drm_priv->kernel_pm.wakelock_cnt) == 0)
-		pm_ret = disp_dpc_driver.dpc_vidle_power_keep(user | VOTER_ONLY);
-	else
+		pm_ret = VOTER_PM_FAILED;
+	else if (atomic_read(&vidle_data.drm_priv->kernel_pm.wakelock_cnt) == 0) {
+		if (user == DISP_VIDLE_USER_PQ) {
+			/* not suitable for PQ user */
+			pm_ret = VOTER_PM_FAILED;
+		} else {
+			/* VOTER_ONLY is set means the power check will be skipped
+			 * useful in perparing for the power on process
+			 * otherwise, the power on process may be powered off by vidle
+			 */
+			pm_ret = disp_dpc_driver.dpc_vidle_power_keep(user | VOTER_ONLY);
+		}
+	} else
 		pm_ret = disp_dpc_driver.dpc_vidle_power_keep(user);
 
 	if (user == DISP_VIDLE_USER_CRTC)
 		vidle_data.pm_ret_crtc = pm_ret;
-	else if (user == DISP_VIDLE_USER_PQ)
-		vidle_data.pm_ret_pq = pm_ret;
 
 	return pm_ret;
 }
@@ -242,8 +248,7 @@ void mtk_vidle_user_power_release_v2(enum mtk_vidle_voter_user user)
 	if (atomic_read(&vidle_data.drm_priv->kernel_pm.status) == KERNEL_SHUTDOWN)
 		return;
 
-	if ((user == DISP_VIDLE_USER_CRTC && vidle_data.pm_ret_crtc == VOTER_ONLY) ||
-	    (user == DISP_VIDLE_USER_PQ && vidle_data.pm_ret_pq == VOTER_ONLY))
+	if (user == DISP_VIDLE_USER_CRTC && vidle_data.pm_ret_crtc == VOTER_ONLY)
 		user |= VOTER_ONLY;
 
 	disp_dpc_driver.dpc_vidle_power_release(user);
@@ -268,21 +273,25 @@ void mtk_vidle_user_power_release(enum mtk_vidle_voter_user user)
 int mtk_vidle_pq_power_get(const char *caller)
 {
 	s32 ref;
-	int pm_ret = 0;
+	int ret = 0;
 
 	mutex_lock(&g_vidle_pq_ref_lock);
 	ref = atomic_inc_return(&g_vidle_pq_ref);
 	if (ref == 1) {
-		pm_ret = mtk_vidle_user_power_keep(DISP_VIDLE_USER_PQ);
-		if (pm_ret < 0)
+		ret = mtk_vidle_user_power_keep(DISP_VIDLE_USER_PQ);
+
+		/* user access registers only if mminfra and disp power is checked */
+		if (ret != VOTER_PM_DONE) {
 			ref = atomic_dec_return(&g_vidle_pq_ref);
+			ret = -1;
+		}
 	}
 	mutex_unlock(&g_vidle_pq_ref_lock);
 	if (ref < 0) {
 		DDPPR_ERR("%s  get invalid cnt %d\n", caller, ref);
 		return ref;
 	}
-	return pm_ret;
+	return ret;
 }
 
 void mtk_vidle_pq_power_put(const char *caller)
@@ -486,12 +495,11 @@ static int mtk_vidle_update_dt_v2_by_period(unsigned int duration)
 
 	if (duration == vidle_data.te_duration)
 		return duration;
-	else if (duration > vidle_data.te_duration)
-		mtk_vidle_config_ff(false);
+
+	DDPMSG("%s %d -> %d, disable vidle \n", __func__, vidle_data.te_duration, duration);
+	mtk_vidle_config_ff(false);
 
 	disp_dpc_driver.dpc_duration_update(duration);
-
-	DDPMSG("%s %d -> %d\n", __func__, vidle_data.te_duration, duration);
 	vidle_data.te_duration = duration;
 
 	return duration;
@@ -759,8 +767,16 @@ void mtk_vidle_config_ff(bool en)
 
 	ret = disp_dpc_driver.dpc_config(DPC_SUBSYS_DISP, en);
 
-	if (ret == 0)
-		atomic_set(&g_ff_enabled, en);
+	/* skip the same config
+	 * the default value of g_ff_enabled is set as -1(true)
+	 * so the first config_ff(false) can pass this same check
+	 */
+	if (vidle_data.dpc_version == DPC_VER2 && mtk_vidle_is_ff_enabled() == en)
+		return;
+
+	disp_dpc_driver.dpc_config(DPC_SUBSYS_DISP, en);
+
+	atomic_set(&g_ff_enabled, en);
 }
 
 void mtk_vidle_dpc_analysis(void)
@@ -834,8 +850,10 @@ void mtk_vidle_register(const struct dpc_funcs *funcs, enum mtk_dpc_version vers
 	vidle_data.dpc_version = version;
 	disp_dpc_driver = *funcs;
 
-	if(version == DPC_VER1)
+	if (version == DPC_VER1)
 		mtk_vidle_register_v1(funcs);
+	else if (version == DPC_VER2)
+		atomic_set(&g_ff_enabled, -1);	/* indicate not initialized yet */
 
 	complete(&dpc_registered);
 }

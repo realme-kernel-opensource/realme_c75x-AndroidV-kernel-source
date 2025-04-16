@@ -103,6 +103,13 @@ config MTK_MBOX
 	  or 256 bytes SRAM and 32 bit irq. The driver does read/write
 	  SRAM and IRQ handling.
 
+config OPLUS_DDK_MTK
+	bool "oplus ddk platform Support"
+	default n
+	help
+	  this config is for platform, if this is set, it's MTK ddk,
+	  if this is not set , this QCOM platform.
+
 menu "Security"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/soc/mediatek/devapc/Kconfig"

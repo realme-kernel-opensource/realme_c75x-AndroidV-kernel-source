@@ -111,6 +111,21 @@
 
 #include "mtk_disp_vdisp_ao.h"
 
+#ifdef OPLUS_FEATURE_DISPLAY
+#include "oplus_display_sysfs_attrs.h"
+#include "oplus_display_device.h"
+#include "oplus_display_trackpoint_report.h"
+#include <mt-plat/mtk_boot_common.h>
+extern unsigned int silence_mode;
+extern int oplus_ofp_get_fp_type(void *buf);
+static unsigned int fp_type;
+static bool is_get_fp_type = false;
+#endif /* OPLUS_FEATURE_DISPLAY  */
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+#include "oplus_adfr.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR  */
+
+
 #if IS_ENABLED(CONFIG_DRM_MEDIATEK_AUTO)
 #include "mtk_drm_auto/mtk_drm_crtc_auto.h"
 #endif
@@ -983,6 +998,7 @@ static void mtk_atomic_aod_scp_ipi(struct drm_crtc *crtc, bool prepare)
 	}
 
 	if (!crtc->state->active && prepare) {
+		mtk_drm_idlemgr_kick(__func__, crtc, false); /* power on dsi */
 		if (mtk_state->prop_val[CRTC_PROP_DOZE_ACTIVE]) {
 			ulps_wakeup_prd = mtk_drm_aod_scp_get_dsi_ulps_wakeup_prd(crtc);
 			aod_scp_ipi.module_backup(crtc, ulps_wakeup_prd);
@@ -1057,6 +1073,13 @@ static void mtk_atomic_doze_update_pq(struct drm_crtc *crtc, unsigned int stage,
 		crtc->state->active, old_state, stage);
 	mtk_state = to_mtk_crtc_state(crtc->state);
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (!is_get_fp_type) {
+		is_get_fp_type = true;
+		oplus_ofp_get_fp_type(&fp_type);
+	}
+#endif
+
 	if (!crtc->state->active) {
 		if (mtk_state->doze_changed &&
 			!mtk_state->prop_val[CRTC_PROP_DOZE_ACTIVE]) {
@@ -1110,14 +1133,87 @@ static void mtk_atomic_doze_update_pq(struct drm_crtc *crtc, unsigned int stage,
 			mtk_crtc->gce_obj.event[EVENT_CMD_EOF]);
 
 	for_each_comp_in_cur_crtc_path(comp, mtk_crtc, i, j) {
+		if (comp && (mtk_ddp_comp_get_type(comp->id) == MTK_DISP_AAL ||
+
+#ifdef OPLUS_FEATURE_DISPLAY
+				(fp_type != 0x10 && mtk_ddp_comp_get_type(comp->id) == MTK_DISP_CCORR)||
+#else
+				mtk_ddp_comp_get_type(comp->id) == MTK_DISP_CCORR ||
+#endif
+				mtk_ddp_comp_get_type(comp->id) == MTK_DISP_COLOR||
+				mtk_ddp_comp_get_type(comp->id) == MTK_DMDP_AAL)) {
+				if (comp->funcs && comp->funcs->bypass) {
+#ifdef OPLUS_FEATURE_DISPLAY
+					if (mtk_crtc && mtk_crtc->panel_ext && mtk_crtc->panel_ext->params &&
+								mtk_crtc->panel_ext->params->oplus_display_lcd_tp_aod == 1) {
+						/* lcd aod doesn't bypass pq */
+						/* mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle); */
+					} else {
+						mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle);
+					}
+#else
+					mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle);
+#endif
+			}
+		}
+
+#ifdef OPLUS_FEATURE_DISPLAY
+		if (fp_type != 0x10 && (comp->doze_bypass & DOZE_BYPASS_PQ)) {
+			if (mtk_crtc && mtk_crtc->panel_ext && mtk_crtc->panel_ext->params &&
+							mtk_crtc->panel_ext->params->oplus_display_lcd_tp_aod == 1) {
+				/* lcd aod doesn't bypass pq */
+				/* mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle); */
+			} else {
+				mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle);
+			}
+		}
+#else
 		if (comp->doze_bypass & DOZE_BYPASS_PQ)
 			mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle);
+#endif
 	}
 
 	if (mtk_crtc->is_dual_pipe) {
 		for_each_comp_in_dual_pipe(comp, mtk_crtc, i, j) {
+			if (comp && (mtk_ddp_comp_get_type(comp->id) == MTK_DISP_AAL ||
+
+#ifdef OPLUS_FEATURE_DISPLAY
+				(fp_type != 0x10 && mtk_ddp_comp_get_type(comp->id) == MTK_DISP_CCORR)||
+#else
+				mtk_ddp_comp_get_type(comp->id) == MTK_DISP_CCORR ||
+#endif
+
+				mtk_ddp_comp_get_type(comp->id) == MTK_DISP_COLOR||
+				mtk_ddp_comp_get_type(comp->id) == MTK_DMDP_AAL)) {
+				if (comp->funcs && comp->funcs->bypass) {
+#ifdef OPLUS_FEATURE_DISPLAY
+					if (mtk_crtc && mtk_crtc->panel_ext && mtk_crtc->panel_ext->params &&
+							mtk_crtc->panel_ext->params->oplus_display_lcd_tp_aod == 1) {
+						/* lcd aod doesn't bypass pq */
+						/* mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle); */
+					} else {
+						mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle);
+					}
+#else
+					mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle);
+#endif
+				}
+			}
+
+#ifdef OPLUS_FEATURE_DISPLAY
+			if(fp_type != 0x10 && (comp->doze_bypass & DOZE_BYPASS_PQ)) {
+				if (mtk_crtc && mtk_crtc->panel_ext && mtk_crtc->panel_ext->params &&
+							mtk_crtc->panel_ext->params->oplus_display_lcd_tp_aod == 1) {
+					/* lcd aod doesn't bypass pq */
+					/* mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle); */
+				} else {
+					mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle);
+				}
+			}
+#else
 			if(comp->doze_bypass & DOZE_BYPASS_PQ)
 				mtk_ddp_comp_bypass(comp, bypass, PQ_FEATURE_KRN_DOZE, cmdq_handle);
+#endif
 		}
 	}
 
@@ -1608,6 +1704,7 @@ static enum mml_mode _mtk_atomic_mml_plane(struct drm_device *dev,
 	ret = mml_drm_submit(mml_ctx, submit_kernel, &(mtk_crtc->mml_cb));
 	if (ret)
 		goto err_submit;
+	mtk_crtc->is_mml_submit = true;
 
 	atomic_set(&(mtk_crtc->wait_mml_last_job_is_flushed), 0);
 
@@ -1633,6 +1730,8 @@ err_src_fd:
 	mtk_free_mml_submit(submit_kernel);
 err_alloc_submit_pq:
 	mtk_free_mml_submit(submit_pq);
+
+	mtk_crtc->is_mml_submit = false;
 	return MML_MODE_UNKNOWN;
 }
 
@@ -1667,6 +1766,7 @@ static void mtk_atomic_mml(struct drm_device *dev,
 		return;
 
 	mtk_crtc = to_mtk_crtc(crtc);
+	mtk_crtc->is_mml_submit = false;
 
 	for_each_old_plane_in_state(state, plane, old_plane_state, i) {
 		plane_state = plane->state;
@@ -1686,6 +1786,18 @@ static void mtk_atomic_mml(struct drm_device *dev,
 	if (!need_update_plane && (mtk_crtc_state->lye_state.mml_ir_lye ||
 			mtk_crtc_state->lye_state.mml_dl_lye)) {
 		DDPINFO("no plane_update with mml lye, skip %s\n", __func__);
+		for (i = 0; i < mtk_crtc->layer_nr; i++) {
+			struct drm_plane *plane = &mtk_crtc->planes[i].base;
+			struct mtk_plane_state *plane_state;
+
+			plane_state = to_mtk_plane_state(plane->state);
+			if (plane_state->comp_state.layer_caps & MTK_MML_DISP_DIRECT_LINK_LAYER) {
+				plane_state->comp_state.layer_caps &= ~MTK_MML_DISP_DIRECT_LINK_LAYER;
+				plane_state->pending.enable = 0;
+				plane_state->pending.mml_mode = 0;
+				break;
+			}
+		}
 		return;
 	}
 
@@ -1806,6 +1918,29 @@ static void mtk_atomic_complete(struct mtk_drm_private *private,
 	mtk_set_first_config(drm, state);
 
 	mtk_drm_enable_trig(drm, state);
+
+	{
+	unsigned int crtc_mask = mtk_atomic_crtc_mask(drm, state);
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	if (private->crtc[0]) {
+		oplus_adfr_set_current_crtc(private->crtc[0]);
+	} else if (private->crtc[3]) {
+		oplus_adfr_set_current_crtc(private->crtc[3]);
+	}
+
+	if (crtc_mask & BIT(0)) {
+		struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(private->crtc[0]);
+		if (mtk_crtc) {
+			oplus_adfr_auto_mode_update(mtk_crtc);
+		}
+	} else if (crtc_mask & BIT(3)) {
+		struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(private->crtc[3]);
+		if (mtk_crtc) {
+			oplus_adfr_auto_mode_update(mtk_crtc);
+		}
+	}
+#endif
+	}
 
 	mtk_atomic_disp_rsz_roi(drm, state);
 
@@ -3435,9 +3570,9 @@ static const enum mtk_ddp_comp_id mt6991_mtk_ovlsys_main_bringup[] = {
 	DDP_COMPONENT_OVL0_BLENDER2,
 	DDP_COMPONENT_OVL_EXDMA5,
 	DDP_COMPONENT_OVL0_BLENDER3,
-	DDP_COMPONENT_OVL_EXDMA6,
-	DDP_COMPONENT_OVL0_BLENDER4,
 	DDP_COMPONENT_OVL_EXDMA7,
+	DDP_COMPONENT_OVL0_BLENDER4,
+	DDP_COMPONENT_OVL_EXDMA6,
 	DDP_COMPONENT_OVL0_BLENDER5,
 	DDP_COMPONENT_OVL_EXDMA8,
 	DDP_COMPONENT_OVL0_BLENDER6,
@@ -6754,6 +6889,8 @@ static const struct mtk_mmsys_driver_data mt6991_mmsys_driver_data = {
 	.skip_trans = true,
 	.update_channel_hrt = mtk_disp_update_channel_hrt_MT6991,
 	.get_channel_idx = mtk_disp_get_channel_idx_MT6991,
+	//merge trigger must trigger
+	.ct_wiat_cmdq_event = false,
 };
 
 static const struct mtk_mmsys_driver_data mt6897_mmsys_driver_data = {
@@ -7351,15 +7488,22 @@ static void mtk_drm_get_top_clk(struct mtk_drm_private *priv)
 		priv->power_state = true;
 	}
 }
-
+static unsigned int clk_unprepare_trigger = 0;
+extern int is_ac180;
 void mtk_drm_top_clk_prepare_enable(struct drm_crtc *crtc)
 {
 	struct mtk_drm_private *priv = crtc->dev->dev_private;
 	int i;
 	bool en = 1;
-	int ret;
+	int ret, clk_ref_cnt = 0;
 	unsigned long flags = 0;
 	struct mtk_drm_crtc *mtk_crtc = NULL;
+/* #ifdef OPLUS_FEATURE_DISPLAY */
+	struct mtk_crtc_state *state = to_mtk_crtc_state(crtc->state);
+	struct drm_display_mode *adjust_mode;
+	unsigned int cur_fps = 0;
+	int mode_idx = 0;
+/* #endif */
 	int crtc_idx = drm_crtc_index(crtc);
 
 	if (priv->top_clk_num <= 0)
@@ -7392,7 +7536,32 @@ void mtk_drm_top_clk_prepare_enable(struct drm_crtc *crtc)
 			if (crtc_idx == 0) {
 				CRTC_MMP_MARK(crtc_idx, enter_vidle,
 					(0xc10c | 0x10000000), atomic_read(&top_clk_ref));
-				mtk_vidle_config_ff(true);
+/* #ifdef OPLUS_FEATURE_DISPLAY */
+				mtk_crtc = to_mtk_crtc(priv->crtc[0]);
+				mode_idx = mtk_crtc->mode_idx;
+				adjust_mode = &(mtk_crtc->avail_modes[mode_idx]);
+				cur_fps = drm_mode_vrefresh(adjust_mode);
+				pr_err("mtk_drm_top_clk_prepare_enable ac180=%d\n",is_ac180);
+			if (is_ac180 == 1) {
+				if (crtc->state->mode.hskew == OPLUS_ADFR || crtc->state->mode.hskew == OPLUS_MFR ||
+					state->prop_val[CRTC_PROP_DOZE_ACTIVE]) {
+					DDPINFO("%s oa aod close vidle\n", __func__);
+					mtk_vidle_config_ff(false);
+				} else {
+					DDPINFO("%s open vidle\n", __func__);
+					mtk_vidle_config_ff(true);
+				}
+			} else {
+				if (crtc->state->mode.hskew == OPLUS_ADFR || crtc->state->mode.hskew == OPLUS_MFR ||
+					state->prop_val[CRTC_PROP_DOZE_ACTIVE] || cur_fps == 60 || cur_fps == 90) {
+					DDPINFO("%s oa aod 60&90 close vidle\n", __func__);
+					mtk_vidle_config_ff(false);
+				} else {
+					DDPINFO("%s open vidle\n", __func__);
+					mtk_vidle_config_ff(true);
+				}
+			}
+/* #endif */
 			} else {
 				CRTC_MMP_MARK(crtc_idx, leave_vidle,
 					(0xc10c | 0x20000000), atomic_read(&top_clk_ref));
@@ -7405,7 +7574,8 @@ void mtk_drm_top_clk_prepare_enable(struct drm_crtc *crtc)
 		}
 
 	} else {
-		if (atomic_read(&top_clk_ref) == 1)  {
+		clk_ref_cnt = atomic_read(&top_clk_ref);
+		if (clk_ref_cnt == 1) {
 			DDPFENCE("%s:%d power_state = true\n", __func__, __LINE__);
 			priv->power_state = true;
 
@@ -7413,6 +7583,13 @@ void mtk_drm_top_clk_prepare_enable(struct drm_crtc *crtc)
 			if (mtk_crtc &&
 				mtk_drm_helper_get_opt(priv->helper_opt, MTK_DRM_OPT_VIDLE_DECOUPLE_MODE))
 				mtk_crtc->is_mml_dc = false;
+			CRTC_MMP_MARK(crtc_idx, leave_vidle,
+				(0xc10c | 0x40000000), atomic_read(&top_clk_ref));
+			mtk_vidle_config_ff(false);
+			mtk_vidle_enable(mtk_vidle_is_ff_enabled(), priv);
+		} else if ((clk_ref_cnt > 1 ) && (++clk_unprepare_trigger == 2)) {
+			dump_stack();
+			DDPAEE_FATAL("%s clk enable too much time %d \n ", __func__, clk_ref_cnt);
 		}
 	}
 
@@ -11481,7 +11658,7 @@ static bool init_secure_static_path_switch(struct device *dev, struct mtk_drm_pr
 {
 	struct device_node *dt_node;
 
-	dt_node = of_find_node_by_name(dev->of_node, "SecureVideoPath");
+	dt_node = of_find_node_by_name(dev->of_node, "SecureHDCPPath");
 	if (!dt_node) {
 		priv->secure_static_path_switch = false;
 		return false;
@@ -12013,6 +12190,15 @@ SKIP_OVLSYS_CONFIG:
 
 	memcpy(&mydev, pdev, sizeof(mydev));
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	pr_info("[%s] get_boot_mode() is %d\n", __func__, get_boot_mode());
+	if ((get_boot_mode() == SILENCE_BOOT)
+			||(get_boot_mode() == OPPO_SAU_BOOT)) {
+		pr_info("[%s] set silence_mode to 1\n", __func__);
+		silence_mode = 1;
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	return 0;
 
 err_pm:
@@ -12034,19 +12220,28 @@ static void mtk_drm_shutdown(struct platform_device *pdev)
 	struct drm_device *drm = private->drm;
 	int ret = 0;
 
-	if (drm) {
-		/* skip all next atomic commit */
-		atomic_set(&private->kernel_pm.status, KERNEL_SHUTDOWN);
-		DDPMSG("%s status(%d)\n", __func__, atomic_read(&private->kernel_pm.status));
-		mtk_drm_pm_ctrl(private, DISP_PM_GET);
-		ret = mtk_vidle_force_power_ctrl_by_cpu(true);
-		drm_atomic_helper_shutdown(drm);
-		if (!ret)
-			ret = mtk_vidle_force_power_ctrl_by_cpu(false);
-		else if (ret < 0)
-			DDPMSG("%s ret[%d]", __func__, ret);
-		mtk_drm_pm_ctrl(private, DISP_PM_PUT);
+	if (!drm)
+		return;
+
+	/* skip all next atomic commit */
+	atomic_set(&private->kernel_pm.status, KERNEL_SHUTDOWN);
+	DDPMSG("%s status(%d)\n", __func__, atomic_read(&private->kernel_pm.status));
+
+	/* skip shutdown flow if already suspended */
+	if (atomic_read(&private->kernel_pm.wakelock_cnt) == 0) {
+		DDPMSG("%s skipped, disp wakelock already released\n", __func__);
+		return;
 	}
+
+	ret = mtk_vidle_force_power_ctrl_by_cpu(true);
+	if (ret < 0) {
+		DDPMSG("%s skipped, power keep ret(%d)\n", __func__, ret);
+		return;
+	}
+	mtk_drm_pm_ctrl(private, DISP_PM_GET);
+	drm_atomic_helper_shutdown(drm);
+	mtk_drm_pm_ctrl(private, DISP_PM_PUT);
+	mtk_vidle_force_power_ctrl_by_cpu(false);
 }
 
 static int mtk_drm_remove(struct platform_device *pdev)
@@ -12274,6 +12469,11 @@ static int __init mtk_drm_init(void)
 			goto err;
 		}
 	}
+#ifdef OPLUS_FEATURE_DISPLAY
+	oplus_display_private_api_init();
+	oplus_display_panel_init();
+	oplus_display_trackpoint_report_init();
+#endif /* OPLUS_FEATURE_DISPLAY  */
 	DDPINFO("%s-\n", __func__);
 
 	return 0;

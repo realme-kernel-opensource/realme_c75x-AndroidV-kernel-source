@@ -178,12 +178,23 @@ static struct logger_buffer dprec_logger_buffer[DPREC_LOGGER_PR_NUM] = {
 };
 static atomic_t is_buffer_init = ATOMIC_INIT(0);
 static char *debug_buffer;
-#if IS_ENABLED(CONFIG_MTK_DISP_LOGGER)
-static bool logger_enable = 1;
-unsigned int g_trace_log = 1;
+#ifdef OPLUS_FEATURE_DISPLAY
+	#if IS_ENABLED(CONFIG_MTK_DISP_LOGGER)
+	bool logger_enable = 1;
+	unsigned int g_trace_log = 1;
+	#else
+	bool logger_enable = 1;
+	unsigned int g_trace_log = 1;
+	#endif
+	EXPORT_SYMBOL(g_trace_log);
 #else
-static bool logger_enable;
-unsigned int g_trace_log;
+	#if IS_ENABLED(CONFIG_MTK_DISP_LOGGER)
+	static bool logger_enable = 1;
+	unsigned int g_trace_log = 1;
+	#else
+	static bool logger_enable;
+	unsigned int g_trace_log;
+	#endif
 #endif
 
 struct DISP_PANEL_BASE_VOLTAGE base_volageg;
@@ -395,7 +406,11 @@ static char *_logger_pr_type_spy(enum DPREC_LOGGER_PR_TYPE type)
 	}
 }
 
+#ifdef OPLUS_FEATURE_DISPLAY
+void init_log_buffer(void)
+#else
 static void init_log_buffer(void)
+#endif
 {
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	unsigned long va;
@@ -5733,6 +5748,55 @@ static int hrt_lp_proc_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+#ifdef OPLUS_FEATURE_DISPLAY
+void pq_dump_all(unsigned int dump_flag)
+{
+	struct drm_crtc *crtc;
+	struct mtk_drm_crtc *mtk_crtc;
+
+	DDPMSG("pq dump idle off flag:0x%x\n", dump_flag);
+	/* this debug cmd only for crtc0 */
+
+	DDPMSG("pq set diagnose dump flag:0x%x\n", dump_flag);
+	drm_for_each_crtc(crtc, drm_dev) {
+		if (IS_ERR_OR_NULL(crtc)) {
+			DDPPR_ERR("find crtc fail\n");
+			continue;
+		}
+
+		if (drm_crtc_index(crtc) != 0) {
+			DDPPR_ERR("find crtc fail\n");
+			continue;
+		}
+
+		mtk_crtc = to_mtk_crtc(crtc);
+		if (!mtk_crtc->enabled
+			|| mtk_crtc->ddp_mode == DDP_NO_USE)
+			continue;
+
+		mtk_drm_set_idlemgr(crtc, 0, 1);
+		if (mtk_crtc) {
+			DDP_MUTEX_LOCK(&mtk_crtc->lock, __func__, __LINE__);
+		}
+
+		if (mtk_crtc->enabled && mtk_crtc->ddp_mode != DDP_NO_USE ) {
+			mtk_drm_crtc_analysis(crtc);
+			mtk_drm_crtc_dump(crtc);
+			process_dbg_opt("pq_dump:0,0xff");
+		} else {
+			DDPMSG("drm_crtc_index(crtc):%d,crtc->enabled:%d,mtk_crtc->ddp_mode:%d",drm_crtc_index(crtc),crtc->enabled,mtk_crtc->ddp_mode);
+		}
+		if (mtk_crtc) {
+			DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+		}
+
+		DDPMSG("CRTC%d: pq set diagnose dump flag:0x%x\n", drm_crtc_index(crtc),  dump_flag);
+		mtk_drm_set_idlemgr(crtc, 1, 1);
+	}
+}
+EXPORT_SYMBOL(pq_dump_all);
+#endif
+
 static ssize_t hrt_lp_proc_set(struct file *file, const char __user *ubuf,
 			   size_t count, loff_t *ppos)
 {
@@ -5982,6 +6046,13 @@ void get_disp_dbg_buffer(unsigned long *addr, unsigned long *size,
 		*start = 0;
 	}
 }
+
+#ifdef OPLUS_FEATURE_DISPLAY
+struct drm_device *get_drm_device(void){
+		return drm_dev;
+}
+EXPORT_SYMBOL(get_drm_device);
+#endif
 
 void mtk_ovl_set_aod_scp_hrt(void)
 {

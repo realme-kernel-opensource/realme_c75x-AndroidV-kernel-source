@@ -15,6 +15,7 @@
 #include <linux/jump_label.h>
 #include <trace/events/sched.h>
 #include <trace/events/task.h>
+#include <trace/hooks/cpufreq.h>
 #include <trace/hooks/sched.h>
 //#include <trace/hooks/hung_task.h>
 #include <linux/sched/cputime.h>
@@ -24,6 +25,9 @@
 #include "sched_sys_common.h"
 #include "sugov/cpufreq.h"
 #include "eas_adpf.h"
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_common.h>
+#endif
 #if IS_ENABLED(CONFIG_MTK_GEARLESS_SUPPORT)
 #include "mtk_energy_model/v3/energy_model.h"
 #else
@@ -195,6 +199,10 @@ static void sched_queue_task_hook(void *data, struct rq *rq, struct task_struct 
 				p->cpus_ptr->bits[0]);
 	}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (type == dequeue)
+		android_rvh_dequeue_task_handler(data, rq, p, flags);
+#endif
 	irq_log_store();
 }
 
@@ -385,13 +393,14 @@ static void mtk_post_init_entity_util_avg(void *data, struct sched_entity *se)
 static void mtk_set_cpus_allowed_ptr(void *data, struct task_struct *p,
 	struct affinity_context *ctx, bool *skip_user_ptr)
 {
+	struct rq_flags rf;
 	struct cpumask *kernel_allowed_mask = &((struct mtk_task *) p->android_vendor_data1)->kernel_allowed_mask;
-	struct rq *rq = task_rq(p);
+	struct rq *rq = task_rq_lock(p, &rf);
 	cpumask_t new_mask;
 
 	// not set or invalid cpu mask
 	if (cpumask_empty(kernel_allowed_mask)){
-		return;
+		goto out;
 	}
 
 	if (p->user_cpus_ptr &&
@@ -405,6 +414,10 @@ static void mtk_set_cpus_allowed_ptr(void *data, struct task_struct *p,
 		cpumask_copy(&new_mask, ctx->new_mask);
 		trace_sched_skip_user(p, *skip_user_ptr, p->user_cpus_ptr, kernel_allowed_mask, &new_mask);
 	}
+
+out:
+		task_rq_unlock(rq, p, &rf);
+		return;
 }
 
 #if IS_ENABLED(CONFIG_MTK_IRQ_MONITOR_DEBUG)
@@ -854,6 +867,16 @@ static long eas_ioctl_impl(struct file *filp,
 			return -1;
 		unset_runnable_boost_enable();
 		break;
+	case EAS_SET_CURR_TASK_UCLAMP:
+		if (easctl_copy_from_user(&val, (void *)arg, sizeof(unsigned int)))
+			return -1;
+		set_curr_task_uclamp_ctrl(val);
+		break;
+	case EAS_UNSET_CURR_TASK_UCLAMP:
+		if (easctl_copy_from_user(&val, (void *)arg, sizeof(unsigned int)))
+			return -1;
+		unset_curr_task_uclamp_ctrl();
+		break;
 	default:
 		pr_debug(TAG "%s %d: unknown cmd %x\n",
 			__FILE__, __LINE__, cmd);
@@ -1128,6 +1151,8 @@ static int __init mtk_scheduler_init(void)
 	ret = register_trace_android_rvh_cpu_util_cfs_boost(mtk_cpu_util_cfs_boost_hook, NULL);
 	if (ret)
 		pr_info("register mtk_cpu_util_cfs_boost_hook hooks failed, returned %d\n", ret);
+
+    ret = register_trace_android_rvh_show_max_freq(oppo_show_cpuinfo_max_freq, NULL);
 
 	ret = register_trace_android_vh_scheduler_tick(hook_scheduler_tick, NULL);
 	if (ret)

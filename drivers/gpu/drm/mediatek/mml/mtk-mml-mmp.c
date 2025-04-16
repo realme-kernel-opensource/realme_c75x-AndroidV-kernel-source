@@ -88,6 +88,10 @@ void mml_mmp_init(void)
 
 	parent = mml_mmp_events.dvfs;
 	mml_mmp_events.throughput = mmprofile_register_event(parent, "throughput");
+	mml_mmp_events.rrot_size = mmprofile_register_event(parent, "rrot_size");
+	mml_mmp_events.datasize = mmprofile_register_event(parent, "datasize");
+	mml_mmp_events.hrt = mmprofile_register_event(parent, "hrt");
+	mml_mmp_events.bw_port = mmprofile_register_event(parent, "bw_port");
 	mml_mmp_events.bandwidth = mmprofile_register_event(parent, "bandwidth");
 	mml_mmp_events.mmdvfs = mmprofile_register_event(parent, "vcp_mmdvfs");
 	mml_mmp_events.overdue = mmprofile_register_event(parent, "overdue");

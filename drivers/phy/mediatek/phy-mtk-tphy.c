@@ -334,6 +334,10 @@
 
 #define PHY_MODE_UART "usb2uart_mode=1"
 #define PHY_MODE_JTAG "usb2jtag_mode=1"
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define OPLUS_USB_PATH		"oplus_usb_tphy"
+#define OPLUS_TPHY_PATH	"tphy"
+#endif
 
 enum mtk_phy_version {
 	MTK_PHY_V1 = 1,
@@ -442,7 +446,42 @@ struct mtk_tphy {
 	int src_ref_clk; /* MHZ, reference clock for slew rate calibrate */
 	int src_coef; /* coefficient for slew rate calibrate */
 	struct proc_dir_entry *root;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct proc_dir_entry * oplus_usb_root;
+#endif
 };
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+enum oplus_tphy_type {
+	PHY_EFUSE_INTR = 0,
+	U2_EYE_SRC,
+	U2_EYE_VRT,
+	U2_EYE_TERM,
+	U2_DISTACH,
+	U2_RX_SQTH,
+	U2_REV6,
+	U3_EFUSE_TX_IMP,
+	U3_EFUSE_RX_IMP,
+	TPHY_MAX_PARAMS_NUM
+};
+
+static const char *const params_name[] = {
+	"efuse-intr",
+	"eye-src",
+	"eye-vrt",
+	"eye-term",
+	"discth",
+	"rx-sqth",
+	"rev6",
+	"efuse-tx-imp",
+	"efuse-rx-imp",
+	"max-params-len",
+};
+
+static int def_params_val[TPHY_MAX_PARAMS_NUM];
+static int params_id_seq[TPHY_MAX_PARAMS_NUM];
+static int params_update_num;
+#endif
 
 static void u2_phy_props_set(struct mtk_tphy *tphy,
 		struct mtk_phy_instance *instance);
@@ -1147,6 +1186,314 @@ err0:
 	return ret;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static int oplus_u2_tphy_params_set_def(struct mtk_phy_instance *inst)
+{
+	if (!inst)
+		return -EINVAL;
+
+	inst->efuse_intr = def_params_val[PHY_EFUSE_INTR];
+	inst->eye_src = def_params_val[U2_EYE_SRC];
+	inst->eye_vrt = def_params_val[U2_EYE_VRT];
+	inst->eye_term = def_params_val[U2_EYE_TERM];
+	inst->discth = def_params_val[U2_DISTACH];
+	inst->rx_sqth = def_params_val[U2_RX_SQTH];
+	inst->rev6 = def_params_val[U2_REV6];
+
+	return 0;
+}
+
+static int oplus_u3_tphy_params_set_def(struct mtk_phy_instance *inst)
+{
+	if (!inst)
+		return -EINVAL;
+
+	inst->efuse_intr = def_params_val[PHY_EFUSE_INTR];
+	inst->efuse_tx_imp = def_params_val[U3_EFUSE_TX_IMP];
+	inst->efuse_rx_imp = def_params_val[U3_EFUSE_RX_IMP];
+
+	return 0;
+}
+
+static int oplus_tphy_params_set_def(struct mtk_phy_instance *inst)
+{
+	if (!inst)
+		return -EINVAL;
+
+	params_update_num = 0;
+
+	if (inst->type == PHY_TYPE_USB2)
+		return oplus_u2_tphy_params_set_def(inst);
+	else if (inst->type == PHY_TYPE_USB3)
+		return oplus_u3_tphy_params_set_def(inst);
+
+	return 0;
+}
+
+static int oplus_u2_tphy_params_get(struct mtk_phy_instance *inst, u32 *params_val)
+{
+	if (!inst)
+		return -EINVAL;
+
+	params_val[PHY_EFUSE_INTR] = inst->efuse_intr;
+	params_val[U2_EYE_SRC] = inst->eye_src;
+	params_val[U2_EYE_VRT] = inst->eye_vrt;
+	params_val[U2_EYE_TERM] = inst->eye_term;
+	params_val[U2_DISTACH] = inst->discth;
+	params_val[U2_RX_SQTH] = inst->rx_sqth;
+	params_val[U2_REV6] = inst->rev6;
+
+	return 0;
+}
+
+static int oplus_u3_tphy_params_get(struct mtk_phy_instance *inst, u32 *params_val)
+{
+	if (!inst)
+		return -EINVAL;
+
+	params_val[PHY_EFUSE_INTR] = inst->efuse_intr;
+	params_val[U3_EFUSE_TX_IMP] = inst->efuse_tx_imp;
+	params_val[U3_EFUSE_RX_IMP] = inst->efuse_rx_imp;
+
+	return 0;
+}
+
+static int proc_oplus_tphy_params_show(struct seq_file *s, void *unused)
+{
+	struct mtk_phy_instance *inst = s->private;
+	u32 index;
+	u32 params_val[TPHY_MAX_PARAMS_NUM] = {0};
+
+	if (params_update_num == 0) {
+		seq_printf(s, "default");
+		return 0;
+	}
+
+	if (inst->type == PHY_TYPE_USB2) {
+		oplus_u2_tphy_params_get(inst, params_val);
+	} else if (inst->type == PHY_TYPE_USB3) {
+		oplus_u3_tphy_params_get(inst, params_val);
+	}
+
+	for (index = 0; index < params_update_num; index++) {
+		if (params_id_seq[index] < 0)
+			continue;
+
+		if (index == params_update_num - 1)
+			seq_printf(s, "%s:0x%02x", params_name[params_id_seq[index]], params_val[params_id_seq[index]]);
+		else
+			seq_printf(s, "%s:0x%02x,", params_name[params_id_seq[index]], params_val[params_id_seq[index]]);
+	}
+
+	return 0;
+}
+
+static int proc_oplus_tphy_params_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, proc_oplus_tphy_params_show, pde_data(inode));
+}
+
+static int oplus_tphy_params_parse(u32 *params_seq, int* params_val, u32 cnt, struct mtk_phy_instance *inst)
+{
+	int index;
+	int seq_i;
+
+	for (index = 0, seq_i = 0; index < cnt && seq_i < params_update_num; index = index + 2, ++seq_i) {
+		if (params_seq[index] >= TPHY_MAX_PARAMS_NUM) {
+			oplus_tphy_params_set_def(inst);
+			return -EINVAL;
+		}
+
+		params_id_seq[seq_i] = params_seq[index];
+		params_val[params_seq[index]] = params_seq[index + 1];
+	}
+
+	return 0;
+}
+
+static int oplus_u2_tphy_params_init(struct mtk_phy_instance *inst, int *params_val)
+{
+	int index;
+
+	if (!inst)
+		return -EINVAL;
+
+	for (index = 0; index < TPHY_MAX_PARAMS_NUM; index++) {
+		if (params_val[index] < 0)    //This parameter is not configured
+			continue;
+
+		switch (index) {
+		case PHY_EFUSE_INTR:
+			inst->efuse_intr = params_val[PHY_EFUSE_INTR];
+			break;
+		case U2_EYE_SRC:
+			inst->eye_src = params_val[U2_EYE_SRC];
+			break;
+		case U2_EYE_VRT:
+			inst->eye_vrt = params_val[U2_EYE_VRT];
+			break;
+		case U2_EYE_TERM:
+			inst->eye_term = params_val[U2_EYE_TERM];
+			break;
+		case U2_DISTACH:
+			inst->discth = params_val[U2_DISTACH];
+			break;
+		case U2_RX_SQTH:
+			inst->rx_sqth = params_val[U2_RX_SQTH];
+			break;
+		case U2_REV6:
+			inst->rev6 = params_val[U2_REV6];
+			break;
+		default:
+			dev_info(&inst->phy->dev, "invalid index, index=%d\n", index);
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static int oplus_u3_tphy_params_init(struct mtk_phy_instance *inst, int *params_val)
+{
+	int index;
+
+	if (!inst)
+		return -EINVAL;
+
+	for (index = 0; index < TPHY_MAX_PARAMS_NUM; index++) {
+		if (params_val[index] < 0)    //This parameter is not configured
+			continue;
+
+		switch (index) {
+		case PHY_EFUSE_INTR:
+			inst->efuse_intr = params_val[PHY_EFUSE_INTR];
+			break;
+		case U3_EFUSE_TX_IMP:
+			inst->efuse_tx_imp = params_val[U3_EFUSE_TX_IMP];
+			break;
+		case U3_EFUSE_RX_IMP:
+			inst->efuse_rx_imp = params_val[U3_EFUSE_RX_IMP];
+			break;
+		default:
+			dev_info(&inst->phy->dev, "invalid index, index=%d\n", index);
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static ssize_t proc_oplus_tphy_params_write(struct file *file,
+	const char __user *ubuf, size_t count, loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct mtk_phy_instance *inst = s->private;
+	size_t ret = 0;
+	char buf[1024];
+	char val_str[128];
+	char *str = buf;
+	char *pos = NULL;
+	u32 params_seq[TPHY_MAX_PARAMS_NUM * 2];
+	int params_val[TPHY_MAX_PARAMS_NUM];
+	u32 cnt = 0;
+	u32 val = 0;
+	u32 id = 0;
+
+	params_update_num = 0;
+
+	memset(buf, 0x00, sizeof(buf));
+	memset(params_seq, 0x00, sizeof(params_seq));
+	memset(params_val, 0xFF, sizeof(params_val));
+	memset(params_id_seq, 0x00, sizeof(params_id_seq));
+
+	if (count > sizeof(buf) - 1) {
+		dev_info(&inst->phy->dev, "data length out of range, count=%zu\n", count);
+		return -EFAULT;
+	}
+
+	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
+		return -EFAULT;
+
+	if (strncmp(buf, "reset", strlen("reset")) == 0) {
+		dev_info(&inst->phy->dev, "parameters reset\n");
+		oplus_tphy_params_set_def(inst);
+		return count;
+	}
+
+	while (*str != '\0' && *str != '\n') {
+		pos = strchr(str, ':');
+		if (!pos || pos - str >= 128) {
+			dev_info(&inst->phy->dev, "invalid data, buffer=%s\n", str);
+			return -EFAULT;
+		}
+
+		strncpy(val_str, str, pos - str);
+		val_str[pos - str] = '\0';
+		str = pos + 1;
+
+		for (id = 0; id < TPHY_MAX_PARAMS_NUM; id++) {
+			if (!strcmp(params_name[id], val_str)) {
+				dev_info(&inst->phy->dev, "cmp id=%d\n", id);
+				break;
+			}
+		}
+		params_seq[cnt++] = id;
+
+		if (sscanf(str, "%x", &val) == 1) {
+			params_seq[cnt++] = val;
+			str = strstr(str, ",");
+			if (!str)
+				break;
+			++str;
+		} else {
+			dev_info(&inst->phy->dev, "invalid data, buffer=%s\n", str);
+			return -EFAULT;
+		}
+
+		if (cnt == TPHY_MAX_PARAMS_NUM * 2)
+			break;
+	}
+
+	if (cnt % 2) {
+		dev_info(&inst->phy->dev, "params quantity error, cnt=%d\n", cnt);
+		return -EINVAL;
+	}
+
+	params_update_num = cnt / 2;
+	ret = oplus_tphy_params_parse(params_seq, params_val, cnt, inst);
+	if (ret) {
+		dev_info(&inst->phy->dev, "params parse error\n");
+		return -EINVAL;
+	}
+
+	if (inst->type == PHY_TYPE_USB2)
+		ret = oplus_u2_tphy_params_init(inst, params_val);
+	else if (inst->type == PHY_TYPE_USB3)
+		ret = oplus_u3_tphy_params_init(inst, params_val);
+	if (ret) {
+		dev_info(&inst->phy->dev, "init params error\n");
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static const struct proc_ops proc_oplus_tphy_params_ops = {
+	.proc_open = proc_oplus_tphy_params_open,
+	.proc_write = proc_oplus_tphy_params_write,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+
+static int oplus_tphy_procfs_exit(struct mtk_tphy *tphy)
+{
+	proc_remove(tphy->oplus_usb_root);
+
+	return 0;
+}
+#endif
+
 static int u2_phy_procfs_exit(struct mtk_phy_instance *instance)
 {
 	proc_remove(instance->phy_root);
@@ -1835,6 +2182,15 @@ static void phy_parse_property(struct mtk_tphy *tphy,
 	dev_dbg(dev, "pll-bw:%d, bgr-div:%d\n", instance->pll_bw, instance->bgr_div);
 	dev_dbg(dev, "fsrxlvl:%d, eq-leq-shift:%d\n", instance->fsrxlvl, instance->eq_leq_shift);
 	dev_dbg(dev, "usb-special-phy-settings:%d\n", instance->usb_special_phy_settings);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	def_params_val[PHY_EFUSE_INTR] = instance->efuse_intr;
+	def_params_val[U2_EYE_SRC] = instance->eye_src;
+	def_params_val[U2_EYE_VRT] = instance->eye_vrt;
+	def_params_val[U2_EYE_TERM] = instance->eye_term;
+	def_params_val[U2_DISTACH] = instance->discth;
+	def_params_val[U2_RX_SQTH] = instance->rx_sqth;
+	def_params_val[U2_REV6] = instance->rev6;
+#endif
 }
 
 static void u3_phy_props_set(struct mtk_tphy *tphy,
@@ -2733,6 +3089,10 @@ put_child:
 static int mtk_tphy_remove(struct platform_device *pdev)
 {
 	struct mtk_tphy *tphy = dev_get_drvdata(&pdev->dev);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	oplus_tphy_procfs_exit(tphy);
+#endif
 
 	mtk_phy_procfs_exit(tphy);
 	return 0;

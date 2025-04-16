@@ -3,6 +3,7 @@
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include/mt-plat/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/gpu/mediatek/gpufreq/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/power_throttling/
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/pbm/
 
 ifeq ($(CONFIG_MTK_GCOV_KERNEL),y)
 GCOV_PROFILE_mtk_bp_thl.o := y
@@ -18,3 +19,4 @@ obj-$(CONFIG_PMIC_DUAL_LBAT_SERVICE) += pmic_dual_lbat_service.o
 obj-$(CONFIG_MTK_MD_POWER_THROTTLING) += mtk_md_power_throttling.o
 obj-$(CONFIG_MTK_CPU_POWER_THROTTLING) += mtk_cpu_power_throttling.o
 obj-$(CONFIG_MTK_GPU_POWER_THROTTLING) += mtk_gpu_power_throttling.o
+obj-$(CONFIG_MTK_EXT_POWER_THROTTLING) += mtk_ext_power_throttling.o

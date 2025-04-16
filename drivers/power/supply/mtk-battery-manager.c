@@ -48,7 +48,11 @@ struct mtk_battery_manager *get_mtk_battery_manager(void)
 	struct power_supply *psy;
 
 	if (bm == NULL) {
+#ifndef OPLUS_FEATURE_CHG_BASIC
 		psy = power_supply_get_by_name("battery");
+#else
+		psy = power_supply_get_by_name("mtk-battery");
+#endif
 		if (psy == NULL) {
 			pr_err("[%s]psy is not rdy\n", __func__);
 			return NULL;
@@ -119,6 +123,10 @@ static int shutdown_event_handler(struct mtk_battery *gm)
 		sdu->shutdown_status.is_dlpt_shutdown,
 		sdu->shutdown_status.is_under_shutdown_voltage);
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		pr_err("%s: No need to shutdown,return!!!\n", __func__);
+		return 0;
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
 	if (gm->bm->gm_no == 1)
 		is_single = true;
 	else
@@ -140,7 +148,9 @@ static int shutdown_event_handler(struct mtk_battery *gm)
 			polling++;
 			if (is_single && tmp_duraction.tv_sec >= SHUTDOWN_TIME) {
 				pr_err("soc zero shutdown\n");
+#ifndef OPLUS_FEATURE_CHG_BASIC
 				kernel_power_off();
+#endif
 				return next_waketime(polling);
 			}
 		} else if (current_soc > 0) {
@@ -163,7 +173,9 @@ static int shutdown_event_handler(struct mtk_battery *gm)
 			tmp_duraction = ktime_to_timespec64(duraction);
 			if (is_single && tmp_duraction.tv_sec >= SHUTDOWN_TIME) {
 				pr_err("uisoc one percent shutdown\n");
+#ifndef OPLUS_FEATURE_CHG_BASIC
 				kernel_power_off();
+#endif
 				return next_waketime(polling);
 			}
 		} else if (now_current > 0 && current_soc > 0) {
@@ -262,7 +274,9 @@ static int shutdown_event_handler(struct mtk_battery *gm)
 				if (is_single && tmp_duraction.tv_sec >= SHUTDOWN_TIME) {
 					pr_err("low bat shutdown, over %d second\n",
 						SHUTDOWN_TIME);
+#ifndef OPLUS_FEATURE_CHG_BASIC
 					kernel_power_off();
+#endif
 					return next_waketime(polling);
 				}
 			}
@@ -697,7 +711,11 @@ void mtk_power_misc_init(struct mtk_battery_manager *bm, struct shutdown_control
 		sdc->bat[0].type = BATTERY_MAIN;
 		sdc->bat[0].gm = bm->gm1;
 	}
-	kthread_run(power_misc_routine_thread, bm, "power_misc_thread");
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* oplus add for wakelock */
+	if (!bm->gm1->disableGM30)
+#endif
+		kthread_run(power_misc_routine_thread, bm, "power_misc_thread");
 }
 
 
@@ -911,7 +929,12 @@ static int bm_pm_event(struct notifier_block *notifier,
 				__func__);
 
 			spin_lock_irqsave(&bm->slock, flags);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+			if (bm->gm1 != NULL && !bm->gm1->disableGM30)
+				__pm_relax(bm->bm_wakelock);
+#else
 			__pm_relax(bm->bm_wakelock);
+#endif
 			spin_unlock_irqrestore(&bm->slock, flags);
 			bm->endtime.tv_sec = 0;
 			bm->endtime.tv_nsec = 0;
@@ -961,8 +984,15 @@ enum alarmtimer_restart battery_manager_thread_alarm_func(
 	} else {
 		pr_err("%s: alarm timer timeout\n", __func__);
 			spin_lock_irqsave(&bm->slock, flags);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if (bm->gm1 != NULL && !bm->gm1->disableGM30) {
+			if (!bm->bm_wakelock->active)
+				__pm_stay_awake(bm->bm_wakelock);
+		}
+#else
 		if (!bm->bm_wakelock->active)
 			__pm_stay_awake(bm->bm_wakelock);
+#endif
 		spin_unlock_irqrestore(&bm->slock, flags);
 	}
 
@@ -1463,7 +1493,11 @@ void bm_battery_service_init(struct mtk_battery_manager *bm)
 	struct battery_data *bs_data;
 
 	bs_data = &bm->bs_data;
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	bs_data->psd.name = "battery";
+#else
+	bs_data->psd.name = "mtk-battery";
+#endif
 	bs_data->psd.type = POWER_SUPPLY_TYPE_BATTERY;
 	bs_data->psd.properties = battery_props;
 	bs_data->psd.num_properties = ARRAY_SIZE(battery_props);
@@ -1885,8 +1919,12 @@ static int mtk_bm_probe(struct platform_device *pdev)
 
 	init_waitqueue_head(&bm->wait_que);
 
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (!bm->gm1->disableGM30)
+		bm->bm_wakelock = wakeup_source_register(NULL, "battery_manager_wakelock");
+#else
 	bm->bm_wakelock = wakeup_source_register(NULL, "battery_manager_wakelock");
+#endif
 	spin_lock_init(&bm->slock);
 
 #ifdef CONFIG_PM
@@ -1899,13 +1937,20 @@ static int mtk_bm_probe(struct platform_device *pdev)
 #endif /* CONFIG_PM */
 
 #ifdef BM_USE_HRTIMER
-	battery_manager_thread_hrtimer_init(bm);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (!bm->gm1->disableGM30)
+#endif
+		battery_manager_thread_hrtimer_init(bm);
 #endif
 #ifdef BM_USE_ALARM_TIMER
 	battery_manager_thread_alarm_init(bm);
 #endif
 
-	kthread_run(battery_manager_routine_thread, bm, "battery_manager_thread");
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (!bm->gm1->disableGM30)
+#endif
+		kthread_run(battery_manager_routine_thread, bm, "battery_manager_thread");
+
 
 	bm->bs_data.chg_psy = devm_power_supply_get_by_phandle(&pdev->dev, "charger");
 	if (IS_ERR_OR_NULL(bm->bs_data.chg_psy))

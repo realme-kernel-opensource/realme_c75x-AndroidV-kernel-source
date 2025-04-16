@@ -40,6 +40,10 @@
 #include "mtk-smmu-v3.h"
 #include "iommu_pseudo.h"
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+#include "mm_osvelte/mm-trace.h"
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
+
 #define LOW_ORDER_GFP (GFP_HIGHUSER | __GFP_ZERO | __GFP_COMP)
 #define MID_ORDER_GFP (LOW_ORDER_GFP | __GFP_NOWARN)
 #define HIGH_ORDER_GFP                                                         \
@@ -1743,6 +1747,11 @@ static struct dma_buf *tmem_page_allocate(struct dma_heap *heap,
 	if (!buffer)
 		return ERR_PTR(-ENOMEM);
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	mm_trace_fmt_begin("%s %zu,%zu,%lu",
+			   dma_heap_get_name(heap), sizeof(*buffer),
+			   atomic64_read(&sec_heap->total_size), len);
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 	buffer->len = len;
 	buffer->heap = heap;
 	/* all page base memory set as noncached buffer */
@@ -1776,6 +1785,9 @@ static struct dma_buf *tmem_page_allocate(struct dma_heap *heap,
 
 	init_buffer_info(heap, buffer);
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	mm_trace_fmt_end();
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 	return dmabuf;
 
 free_tmem:
@@ -1790,6 +1802,9 @@ free_tmem:
 	sg_free_table(&buffer->sg_table);
 free_buffer:
 	kfree(buffer);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	mm_trace_fmt_end();
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 	return ERR_PTR(ret);
 }
 

@@ -12,7 +12,12 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
+
+#ifdef CONFIG_OPLUS_PD_EXT_SUPPORT
+#include "../oplus/pd_ext/inc/tcpm.h"
+#else
 #include <tcpm.h>
+#endif
 
 #include "mtk_charger.h"
 #include "mtk_chg_type_det.h"
@@ -23,6 +28,11 @@
 #define MTK_CTD_DRV_VERSION	"1.0.2_MTK"
 
 #define FAST_CHG_WATT		7500000 /* uW */
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/*oplus add for charge*/
+extern bool oplus_chg_wake_update_work(void);
+#endif
 
 struct mci_notifier_block {
 	struct notifier_block nb;
@@ -49,6 +59,8 @@ struct mtk_ctd_info {
 	struct mutex attach_lock;
 	struct task_struct *attach_task;
 };
+
+extern bool tcpm_inquire_usb_comm(struct tcpc_device *tcpc);
 
 static int typec_attach_thread(void *data)
 {
@@ -86,6 +98,10 @@ wait:
 						POWER_SUPPLY_PROP_ONLINE, &val);
 		if (ret < 0)
 			dev_notice(mci->dev, "Failed to set online(%d)\n", ret);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/*oplus add for charge*/
+		oplus_chg_wake_update_work();
+#endif
 	}
 	goto wait;
 out:

@@ -88,6 +88,11 @@ struct mtk_pmic_regs {
 	u32 rst_du_shift;
 };
 
+//#ifdef OPLUS_BUG_STABILITY
+extern int aee_kpd_enable;
+extern void kpd_aee_handler(u32 keycode, u16 pressed);
+//#endif /*OPLUS_BUG_STABILITY*/
+
 static const struct mtk_pmic_regs mt6397_regs = {
 	.keys_regs[MTK_PMIC_PWRKEY_INDEX] =
 		MTK_PMIC_KEYS_REGS(MT6397_CHRSTATUS,
@@ -326,6 +331,13 @@ static irqreturn_t mtk_pmic_keys_release_irq_handler_thread(
 		__pm_relax(info->suspend_lock);
 	dev_dbg(info->keys->dev, "release key =%d using PMIC\n",
 			info->keycode);
+//#ifdef OPLUS_BUG_STABILITY
+	if (aee_kpd_enable && info->keycode == KEY_VOLUMEUP) {
+		pr_err("pmic volup key triggered, pressed is %u\n", 0);
+		kpd_aee_handler(KEY_VOLUMEUP, 0);
+	}
+//#endif /*OPLUS_BUG_STABILITY*/
+
 	return IRQ_HANDLED;
 }
 
@@ -356,6 +368,13 @@ static irqreturn_t mtk_pmic_keys_irq_handler_thread(int irq, void *data)
 		__pm_relax(info->suspend_lock);
 	dev_dbg(info->keys->dev, "(%s) key =%d using PMIC\n",
 		 pressed ? "pressed" : "released", info->keycode);
+
+	//#ifdef OPLUS_BUG_STABILITY
+	if (aee_kpd_enable && info->keycode == KEY_VOLUMEUP) {
+		pr_err("pmic volup key triggered, pressed is %u\n", pressed);
+		kpd_aee_handler(KEY_VOLUMEUP, pressed);
+	}
+	//#endif /*OPLUS_BUG_STABILITY*/
 
 	return IRQ_HANDLED;
 }

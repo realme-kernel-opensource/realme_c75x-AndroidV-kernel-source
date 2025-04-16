@@ -25,3 +25,5 @@ ifndef CONFIG_GRT_HYPERVISOR
 obj-$(CONFIG_MTK_TRUSTED_MEMORY_SUBSYSTEM)	+= mtk_sec_heap.o
 endif
 obj-$(CONFIG_DMABUF_HEAPS_DEBUG) += mtk_heap_debug.o
+obj-$(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL) += ./mm_boost_pool/oplus_boost_pool_mtk.o
+obj-$(CONFIG_OPLUS_FEATURE_MM_OSVELTE) += mm_osvelte/

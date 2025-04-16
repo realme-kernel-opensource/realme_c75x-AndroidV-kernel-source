@@ -381,6 +381,7 @@ static const struct of_device_id mtk_spi_of_match[] = {
 MODULE_DEVICE_TABLE(of, mtk_spi_of_match);
 #define LOG_CLOSE   0
 #define LOG_OPEN    1
+
 u8 spi_log_status = LOG_CLOSE;
 static uint32_t is_ioremaped;
 static void __iomem *reset_base;

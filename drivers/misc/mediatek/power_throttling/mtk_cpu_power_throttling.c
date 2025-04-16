@@ -26,6 +26,17 @@
 #define CORE_NUM 8
 #define NAME_LENGTH 32
 
+struct cpu_pt_policy {
+	enum cpu_pt_type           pt_type;
+	unsigned int               pt_max_lv;
+	unsigned int               cpu;
+	s32                        *freq_limit;
+	struct freq_qos_request    qos_req;
+	struct cpufreq_policy      *policy;
+	struct list_head           cpu_pt_list;
+};
+
+
 struct cpu_pt_priv {
 	char max_lv_name[NAME_LENGTH];
 	char freq_limit_name[NAME_LENGTH];
@@ -58,7 +69,13 @@ static struct cpu_pt_priv cpu_pt_info[POWER_THROTTLING_TYPE_MAX] = {
 		.freq_limit_name = "soc-limit-freq-lv",
 		.core_active_name = "soc-core-active-lv",
 		.max_lv = BATTERY_PERCENT_LEVEL_NUM - 1,
-	}
+	},
+	[EXT_POWER_THROTTLING] = {
+		.max_lv_name = "ext-max-level",
+		.freq_limit_name = "ext-limit-freq-lv",
+		.core_active_name = "",
+		.max_lv = 1,
+	},
 };
 
 static DEFINE_MUTEX(cpu_thr_lock);
@@ -166,6 +183,32 @@ static void cpu_pt_battery_percent_cb(enum BATTERY_PERCENT_LEVEL_TAG level)
 	mutex_unlock(&cpu_thr_lock);
 }
 #endif
+
+#if IS_ENABLED(CONFIG_MTK_EXT_POWER_THROTTLING)
+void cpu_ext_throttle(unsigned int level)
+{
+	struct cpu_pt_policy *pt_policy;
+	s32 freq_limit;
+
+	pr_notice("%s level:%d\n", __func__, level);
+	if (level > cpu_pt_info[EXT_POWER_THROTTLING].max_lv)
+		return;
+	list_for_each_entry(pt_policy, &pt_policy_list, cpu_pt_list) {
+		if (pt_policy->pt_type == EXT_POWER_THROTTLING) {
+			if (level != LOW_BATTERY_LEVEL_0) {
+				freq_limit = pt_policy->freq_limit[level-1];
+				pr_notice("freq_limit:%d\n", freq_limit);
+			} else {
+				freq_limit = FREQ_QOS_MAX_DEFAULT_VALUE;
+				pr_notice("freq_limit:%d\n", freq_limit);
+			}
+			freq_qos_update_request(&pt_policy->qos_req, freq_limit);
+		}
+	}
+}
+EXPORT_SYMBOL(cpu_ext_throttle);
+#endif
+
 static void __used cpu_limit_default_setting(struct device *dev, enum cpu_pt_type type)
 {
 	struct device_node *np = dev->of_node;

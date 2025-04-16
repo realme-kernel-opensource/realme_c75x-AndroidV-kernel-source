@@ -9,6 +9,15 @@
 #include <dt-bindings/phy/phy.h>
 #include <dt-bindings/pinctrl/mt6899-pinfunc.h>
 
+/* Trustonic Mobilecore real driver */
+/* #ifdef OPLUS_FEATURE_SECURITY_COMMON */
+&mobicore{
+	trustonic,real-drv = <1>;
+	trustonic,sel2-support = <0>;
+};
+/* #endif OPLUS_FEATURE_SECURITY_COMMON */
+
+
 &chosen {
 	bootargs_ext = "";
 };
@@ -730,6 +739,6 @@
 #include "mediatek/cust_mt6899_touch_1080x2400_mult.dtsi"
 #include "mediatek/cust_k6899_connfem.dtsi"
 #include "mediatek/cust_mt6899_camera_v4l2.dtsi"
-#include <k6899v1_64/cust.dtsi>
+//#include <k6899v1_64/cust.dtsi>
 
 /*End of this file, DO NOT ADD ANYTHING HERE*/

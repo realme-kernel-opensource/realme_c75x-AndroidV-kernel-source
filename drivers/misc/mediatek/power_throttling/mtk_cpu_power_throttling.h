@@ -11,18 +11,13 @@ enum cpu_pt_type {
 	LBAT_POWER_THROTTLING,
 	OC_POWER_THROTTLING,
 	SOC_POWER_THROTTLING,
+	EXT_POWER_THROTTLING,
 	POWER_THROTTLING_TYPE_MAX
 };
+void cpu_ext_throttle(unsigned int level);
 
-struct cpu_pt_policy {
-	enum cpu_pt_type           pt_type;
-	unsigned int               pt_max_lv;
-	unsigned int               cpu;
-	s32                        *freq_limit;
-	struct freq_qos_request    qos_req;
-	struct cpufreq_policy      *policy;
-	struct list_head           cpu_pt_list;
-};
+typedef int (*cpu_isolate_cb)(unsigned int cpu, bool is_pause);
+extern int register_pt_isolate_cb(cpu_isolate_cb cb_func);
 
 typedef int (*cpu_isolate_cb)(unsigned int cpu, bool is_pause);
 extern int register_pt_isolate_cb(cpu_isolate_cb cb_func);

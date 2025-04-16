@@ -332,6 +332,10 @@ source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/pgboost/Kconfig"
 source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/ktchbst/Kconfig"
 endmenu # Performance
 
+#ifdef OPLUS_FEATURE_OEM_OCDT
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/boot_common/Kconfig"
+#endif
+
 menu "Secure Boot"
 source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/rootfs_check/Kconfig"
 endmenu # Secure Boot
@@ -491,6 +495,18 @@ config MTK_HOST_DRV_WWAN_SUPPORT
 	  please use netlink API or 'ip' command.
 	  Say Y here if need to enable WWAN port in host driver.
 	  If unsure, say N.
+
+config MTK_MEMLOG_EVENT_SUPPORT
+	bool "Support memlog event in Thin MD host driver"
+	help
+	  Used to control the memlog event feature of the Thin MD host driver.
+	  When this option is enabled, host dirver will print
+	  high-frequency logs in hex format.
+	  The logs printed in hex format need to be parsed into
+	  plain text using a post-processing tool.
+	  Say Y here if need to enable memlog event in host driver.
+	  If unsure, say N.
+
 endmenu # Host Driver
 
 config MTK_AUTO_SUPPORT

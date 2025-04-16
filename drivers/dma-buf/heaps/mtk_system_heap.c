@@ -32,9 +32,28 @@
 #include "mtk_page_pool.h"
 #include "mtk-smmu-v3.h"
 
+#define CREATE_TRACE_POINTS
+#include "mtk_dma_trace.h"
+
 #define MAP_FAILED_DUMP_RS_INTERVAL	(2 * HZ)
 #define MAP_FAILED_DUMP_RS_BURST	(1)
 #define RUN_TIMEOUT_TO_LOG		(100000000ULL)
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+#include "mm_osvelte/sys-memstat.h"
+#include "mm_osvelte/mm-trace.h"
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+#include "mm_boost_pool/oplus_boost_pool_mtk.h"
+#include "mm_boost_pool/trace_dma_buf.h"
+
+static struct dma_heap *mtk_mm_heap;
+static struct dma_heap *mtk_mm_uncached_heap;
+static struct boost_pool *mtk_mm_boost_pool;
+static struct boost_pool *mtk_mm_uncached_boost_pool;
+extern atomic64_t boost_pool_pages;
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
 
 atomic64_t dma_heap_normal_total = ATOMIC64_INIT(0);
 EXPORT_SYMBOL(dma_heap_normal_total);
@@ -90,6 +109,17 @@ static struct iova_cache_data *get_iova_cache(struct system_heap_buffer *buffer,
 /* function declare */
 static int system_buf_priv_dump(const struct dma_buf *dmabuf,
 				struct seq_file *s);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+struct boost_pool *has_boost_pool(struct dma_heap *heap)
+{
+	if (heap == mtk_mm_heap)
+		return mtk_mm_boost_pool;
+	else if (heap == mtk_mm_uncached_heap)
+		return mtk_mm_uncached_boost_pool;
+	return NULL;
+}
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
 
 static struct sg_table *dup_sg_table(struct sg_table *table)
 {
@@ -774,8 +804,14 @@ static void system_heap_buf_free(struct mtk_deferred_freelist_item *item,
 	struct sg_table *table;
 	struct scatterlist *sg;
 	int i, j;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+	struct boost_pool *boost_pool;
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
 
 	buffer = container_of(item, struct system_heap_buffer, deferred_free);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+	boost_pool = has_boost_pool(buffer->heap);
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
 	heap_priv = dma_heap_get_drvdata(buffer->heap);
 	page_pools = heap_priv ? heap_priv->page_pools : NULL;
 
@@ -802,9 +838,14 @@ static void system_heap_buf_free(struct mtk_deferred_freelist_item *item,
 					break;
 			}
 
-			if (j < NUM_ORDERS)
+			if (j < NUM_ORDERS) {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+				/* do not put chp page into boot_pool */
+				if (boost_pool && !boost_pool_free(boost_pool, page, j))
+					continue;
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
 				mtk_dmabuf_page_pool_free(page_pools[j], page);
-			else
+			} else
 				pr_info("%s error order:%u\n",
 					__func__, compound_order(page));
 		}
@@ -850,7 +891,8 @@ static void mtk_mm_heap_dma_buf_release(struct dma_buf *dmabuf)
 		 file_inode(dmabuf->file)->i_ino, buffer->len,
 		 dmabuf->name?:"NULL");
 	spin_unlock(&dmabuf->name_lock);
-
+	//add by zhenghaiqing for dma debug
+	trace_mtk_dma_free(buffer->len, dmabuf->android_kabi_reserved2, dmabuf->name?:"NULL");
 	dmabuf_release_check(dmabuf);
 
 	/* unmap all domains' iova */
@@ -894,7 +936,8 @@ static void system_heap_dma_buf_release(struct dma_buf *dmabuf)
 	struct sg_table *table;
 	struct scatterlist *sg;
 	int i, j;
-
+	//add by zhenghaiqing for dma debug
+	trace_mtk_dma_free(buffer->len, dmabuf->android_kabi_reserved2, dmabuf->name?:"NULL");
 	dmabuf_release_check(dmabuf);
 
 	heap_priv = dma_heap_get_drvdata(buffer->heap);
@@ -1115,9 +1158,16 @@ static const struct dma_buf_ops mtk_slc_heap_buf_ops = {
 	.get_flags = system_heap_dma_buf_get_flags,
 };
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+static struct page *alloc_largest_available(unsigned long size,
+					    unsigned int max_order,
+					    struct mtk_dmabuf_page_pool **page_pools,
+					    struct boost_pool *boost_pool)
+#else
 static struct page *alloc_largest_available(unsigned long size,
 					    unsigned int max_order,
 					    struct mtk_dmabuf_page_pool **page_pools)
+#endif/* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
 {
 	struct page *page;
 	int i;
@@ -1127,6 +1177,13 @@ static struct page *alloc_largest_available(unsigned long size,
 			continue;
 		if (max_order < orders[i])
 			continue;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+		if (boost_pool) {
+			page = boost_pool_fetch(boost_pool, i);
+			if (page)
+				return page;
+		}
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
 
 		if (likely(page_pools)) {
 			page = mtk_dmabuf_page_pool_alloc(page_pools[i]);
@@ -1168,6 +1225,21 @@ static struct dma_buf *system_heap_do_allocate(struct dma_heap *heap,
 	struct mtk_heap_priv_info *heap_priv = dma_heap_get_drvdata(heap);
 	u64 tm1, tm2, tm_mid;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+	struct boost_pool *boost_pool = has_boost_pool(heap);
+
+	/* for size < 32K, we do not need alloc from boost pool. */
+	if (len < SZ_32K)
+		boost_pool = NULL;
+#endif /*CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
+
+	if (len >= SZ_1G)
+		pr_warn("%s system_heap allocate %lu >= sz_1g size\n",
+			current->comm, len);
+
+	if (len / PAGE_SIZE > totalram_pages() / 2)
+		return ERR_PTR(-ENOMEM);
+
 	tm1 = sched_clock();
 	DMABUF_TRACE_BEGIN("%s(%s,%lu)", __func__, dma_heap_get_name(heap), len);
 	page_pools = heap_priv ? heap_priv->page_pools : NULL;
@@ -1195,6 +1267,10 @@ static struct dma_buf *system_heap_do_allocate(struct dma_heap *heap,
 		return ERR_PTR(-ENOMEM);
 	}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	mm_trace_fmt_begin("%s %zu,%lu,%lu", dma_heap_get_name(heap),
+		           sizeof(*buffer), atomic64_read(&dma_heap_normal_total), len);
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 	INIT_LIST_HEAD(&buffer->attachments);
 	INIT_LIST_HEAD(&buffer->iova_caches);
 	mutex_init(&buffer->lock);
@@ -1216,7 +1292,11 @@ static struct dma_buf *system_heap_do_allocate(struct dma_heap *heap,
 			goto free_buffer;
 		}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+		page = alloc_largest_available(size_remaining, max_order, page_pools, boost_pool);
+#else
 		page = alloc_largest_available(size_remaining, max_order, page_pools);
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
 		if (!page) {
 			if (fatal_signal_pending(current)) {
 				ret = -EINTR;
@@ -1274,10 +1354,18 @@ static struct dma_buf *system_heap_do_allocate(struct dma_heap *heap,
 	DMABUF_TRACE_BEGIN("dma_buf_export");
 	dmabuf = dma_buf_export(&exp_info);
 	DMABUF_TRACE_END();
+
 	if (IS_ERR(dmabuf)) {
 		ret = PTR_ERR(dmabuf);
 		goto free_pages;
 	}
+    //add by zhenghaiqing for dma debug
+    /*
+	 * use android_kabi_reserved2 as inode no. but it has potential risk if
+	 * google uses it.
+	 */
+	dmabuf->android_kabi_reserved2 = file_inode(dmabuf->file)->i_ino;
+	trace_mtk_dma_alloc(buffer->len, dmabuf->android_kabi_reserved2, exp_info.exp_name?:"NULL");
 
 	/*
 	 * For uncached buffers, we need to initially flush cpu cache, since
@@ -1290,6 +1378,9 @@ static struct dma_buf *system_heap_do_allocate(struct dma_heap *heap,
 		dma_unmap_sgtable(dma_heap_get_dev(heap), table, DMA_BIDIRECTIONAL, 0);
 	}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	mm_trace_fmt_end();
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 	atomic64_add(dmabuf->size, &dma_heap_normal_total);
 
 	tm2 = sched_clock();
@@ -1314,6 +1405,10 @@ free_buffer:
 	list_for_each_entry_safe(page, tmp_page, &pages, lru)
 		__free_pages(page, compound_order(page));
 	kfree(buffer);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	mm_trace_fmt_end();
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 
 	pr_info("%s, %d return error:%d\n", __func__, __LINE__, ret);
 	DMABUF_TRACE_END();
@@ -1478,6 +1573,26 @@ static int set_heap_dev_dma(struct device *heap_dev)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+long read_dmabuf_usage(enum mtrack_subtype type)
+{
+	if (type == MTRACK_DMABUF_SYSTEM_HEAP)
+		return atomic64_read(&dma_heap_normal_total) >> PAGE_SHIFT;
+	else if (type == MTRACK_DMABUF_POOL)
+		return global_node_page_state(NR_KERNEL_MISC_RECLAIMABLE);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+	else if (type == MTRACK_DMABUF_BOOST_POOL)
+		return atomic64_read(&boost_pool_pages);
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
+
+	return 0;
+}
+
+static struct mtrack_debugger mtk_dmabuf_debugger = {
+	.mem_usage = read_dmabuf_usage,
+};
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
+
 static int mtk_heap_create(const char *name, const struct dma_heap_ops *ops,
 			   bool uncached, bool pool)
 {
@@ -1517,6 +1632,19 @@ static int mtk_heap_create(const char *name, const struct dma_heap_ops *ops,
 	if (ret)
 		goto out_free_pools;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+	if (strcmp(name, "mtk_mm") == 0) {
+		mtk_mm_heap = heap;
+		mtk_mm_boost_pool = boost_pool_create(exp_info.name,
+						      smmu_v3_enable);
+
+		if (!mtk_mm_boost_pool)
+			pr_warn("mtk_mm_boost_pool create failed\n");
+		else
+			pr_info("mtk_mm_boost_pool create success\n");
+	}
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
+
 	pr_info("%s add heap[%s] success\n", __func__, exp_info.name);
 	/* Add uncached heap if need */
 	if (uncached) {
@@ -1549,8 +1677,24 @@ static int mtk_heap_create(const char *name, const struct dma_heap_ops *ops,
 		if (ret)
 			goto out_free_heap_2;
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL)
+		if (strcmp(name_uncache, "mtk_mm-uncached") == 0) {
+			mtk_mm_uncached_heap = heap;
+			mtk_mm_uncached_boost_pool = boost_pool_create(exp_info.name,
+								       smmu_v3_enable);
+
+			if (!mtk_mm_uncached_boost_pool)
+				pr_warn("mtk_mm_uncached_boost_pool create failed\n");
+			else
+				pr_info("mtk_mm_uncached_boost_pool create success\n");
+		}
+#endif /* CONFIG_OPLUS_FEATURE_MM_BOOSTPOOL */
 		pr_info("%s add heap[%s] success\n", __func__, exp_info.name);
 	}
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+		register_mtrack_debugger(MTRACK_DMABUF, &mtk_dmabuf_debugger);
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 
 	return 0;
 

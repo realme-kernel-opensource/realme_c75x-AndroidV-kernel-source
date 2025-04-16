@@ -92,6 +92,10 @@ static struct uarthub_drv_cbs uarthub_drv_cbs;
 #endif
 #define MTK_UART_HUB_12M_BAUD 12000000
 #define MTK_UART_HUB_24M_BAUD 24000000
+//#ifdef OPLUS_SATELLITE_CONFIG_UART
+#define MTK_UART_HUB_4M_BAUD 4000000
+#define MTK_UART_HUB_921600_BAUD 921600
+//#endif
 
 #define MAX_POLLING_CNT 8
 #define LOG_BUF_SIZE 35
@@ -165,6 +169,10 @@ struct mtk8250_reg_data {
 
 struct mtk8250_data {
 	int			line;
+//#ifdef OPLUS_SATELLITE_CONFIG_UART
+	int			satellite_uart1_line;
+	int			satellite_uart2_line;
+//endif
 	unsigned int		rx_pos;
 	struct clk		*uart_clk;
 	struct clk		*bus_clk;
@@ -2135,6 +2143,22 @@ mtk8250_set_termios(struct uart_port *port, struct ktermios *termios,
 		serial_port_out(port, MTK_UART_FRACDIV_L, 0xdb);
 		serial_port_out(port, MTK_UART_FRACDIV_M, 0x1);
 
+//#ifdef OPLUS_SATELLITE_CONFIG_UART
+	} else if (((data->satellite_uart1_line == 1) || (data->satellite_uart2_line == 1)) && (baud == MTK_UART_HUB_4M_BAUD)) {
+		serial_port_out(port, MTK_UART_SAMPLE_COUNT, 5);
+		serial_port_out(port, MTK_UART_SAMPLE_POINT, 2);
+		serial_port_out(port, MTK_UART_FRACDIV_L, 0xEF);
+		serial_port_out(port, MTK_UART_FRACDIV_M, 0x1);
+		pr_info("%s: uart[%d]update satellite_line baudrate 3.84M!!\n",
+			__func__, data->line);
+	} else if (((data->satellite_uart1_line == 1) || (data->satellite_uart2_line == 1)) && (baud == MTK_UART_HUB_921600_BAUD)) {
+		serial_port_out(port, MTK_UART_SAMPLE_COUNT, 0x1A);
+		serial_port_out(port, MTK_UART_SAMPLE_POINT, 0xC);
+		serial_port_out(port, MTK_UART_FRACDIV_L, 0x44);
+		serial_port_out(port, MTK_UART_FRACDIV_M, 0x0);
+		pr_info("%s: uart[%d]update satellite_line baudrate 921600!!\n",
+			__func__, data->line);
+//endif
 	} else if (baud >= 115200) {
 		unsigned int tmp;
 
@@ -2206,6 +2230,11 @@ static int __maybe_unused mtk8250_runtime_suspend(struct device *dev)
 			(serial_in(up, MTK_UART_DEBUG0));
 		clk_disable_unprepare(data->bus_clk);
 	}
+//#ifdef OPLUS_SATELLITE_CONFIG_UART
+	if ((data->satellite_uart1_line == 1) || (data->satellite_uart2_line == 1)) {
+		pinctrl_pm_select_sleep_state(dev);
+	}
+//endif
 	return 0;
 }
 
@@ -2227,6 +2256,11 @@ static int __maybe_unused mtk8250_runtime_resume(struct device *dev)
 	atomic_inc(&data->uart_clk_count);
 	dev_dbg(dev, "[%s]:data->line[%d], uart_clk_count[%d]\n",
 			__func__, data->line, atomic_read(&data->uart_clk_count));
+//#ifdef OPLUS_SATELLITE_CONFIG_UART
+	if ((data->satellite_uart1_line == 1) || (data->satellite_uart2_line == 1)) {
+		pinctrl_pm_select_default_state(dev);
+	}
+//endif
 	return 0;
 }
 
@@ -2529,6 +2563,10 @@ static int mtk8250_probe_of(struct platform_device *pdev, struct uart_port *p,
 	unsigned int peri_addr = 0, peri_mask = 0, peri_val = 0;
 	int index = -1;
 	int uart_line = -1;
+//#ifdef OPLUS_SATELLITE_CONFIG_UART
+	int satellite_dts_uart1_line = -1;
+	int satellite_dts_uart2_line = -1;
+//endif
 	int err;
 
 	data->uart_clk = devm_clk_get(&pdev->dev, "baud");
@@ -2571,6 +2609,23 @@ static int mtk8250_probe_of(struct platform_device *pdev, struct uart_port *p,
 			pr_info("probe_uart: data->line: %d:\n", data->line);
 		}
 
+//#ifdef OPLUS_SATELLITE_CONFIG_UART
+		err = of_property_read_u32(pdev->dev.of_node, "satellite-uart1-line", &satellite_dts_uart1_line);
+		if (err < 0) {
+			dev_info(&pdev->dev, "satellite_dts_uart1_line fail!!!\n");
+		} else {
+			data->satellite_uart1_line = satellite_dts_uart1_line;
+			pr_info("probe_uart: data->satellite-uart1-line: %d:\n", data->satellite_uart1_line);
+		}
+		err = of_property_read_u32(pdev->dev.of_node, "satellite-uart2-line", &satellite_dts_uart2_line);
+
+		if (err < 0) {
+			dev_info(&pdev->dev, "satellite_dts_uart2_line fail!!!\n");
+		} else {
+			data->satellite_uart2_line = satellite_dts_uart2_line;
+			pr_info("probe_uart: data->satellite-uart1-line: %d:\n", data->satellite_uart2_line);
+		}
+//#endif
 	data->bus_clk = devm_clk_get(&pdev->dev, "bus");
 	if (IS_ERR(data->bus_clk))
 		return PTR_ERR(data->bus_clk);
@@ -2944,10 +2999,26 @@ static int __maybe_unused mtk8250_resume(struct device *dev)
 
 	if (irq >= 0)
 		disable_irq_wake(irq);
+
+//#ifdef OPLUS_SATELLITE_CONFIG_UART
+#if 0
 	pinctrl_pm_select_default_state(dev);
 
 	serial8250_resume_port(data->line);
 	atomic_set(&data->uart_state, MTK_UART_RESUMED);
+#endif
+	dev_info(dev, "[%s]:data->line[%d], uart_clk_count[%d]\n",
+		__func__, data->line, atomic_read(&data->uart_clk_count));
+	if ((0 == atomic_read(&data->uart_clk_count)) && ((data->satellite_uart1_line == 1) || (data->satellite_uart2_line == 1))) {
+		pinctrl_pm_select_sleep_state(dev);
+		serial8250_suspend_port(data->line);
+		atomic_set(&data->uart_state, MTK_UART_SUSPENDING);
+	} else {
+		pinctrl_pm_select_default_state(dev);
+		serial8250_resume_port(data->line);
+		atomic_set(&data->uart_state, MTK_UART_RESUMED);
+	}
+//endif
 
 	return 0;
 }

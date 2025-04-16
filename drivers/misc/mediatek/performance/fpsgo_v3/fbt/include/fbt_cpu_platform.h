@@ -34,6 +34,11 @@ extern bool is_task_latency_sensitive(struct task_struct *p);
 extern void unset_task_priority_based_vip(int pid);
 extern void turn_on_vip_in_gh(void);
 extern void turn_off_vip_in_gh(void);
+#if IS_ENABLED(CONFIG_MTK_ENGINE_COOLER_DISABLE)
+#else
+extern void game_set_heaviest_pid(int);
+extern void game_set_fps(int, int);
+#endif
 
 void fbt_set_boost_value(unsigned int base_blc);
 void fbt_clear_boost_value(void);

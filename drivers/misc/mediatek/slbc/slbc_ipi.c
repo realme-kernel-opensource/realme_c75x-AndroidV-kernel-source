@@ -20,6 +20,9 @@
 #include "slbc.h"
 #include "slbc_trace.h"
 #include <mtk_slbc_sram.h>
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLC)
+#include <../kernel/oplus_cpu/oplus_slc/oplus_slc.h>
+#endif
 
 #if IS_ENABLED(CONFIG_MTK_TINYSYS_SCMI)
 static int slbc_sspm_ready;
@@ -28,6 +31,12 @@ static struct scmi_tinysys_info_st *_tinfo;
 static unsigned int scmi_id;
 #endif /* CONFIG_MTK_TINYSYS_SCMI */
 static struct slbc_ipi_ops *ipi_ops;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLC)
+struct slbc_ipi_ops *ipi_ops_ref;
+EXPORT_SYMBOL(ipi_ops_ref);
+#endif
+
 static DEFINE_MUTEX(slbc_scmi_lock);
 
 int slbc_sspm_slb_disable(int disable)
@@ -967,6 +976,10 @@ EXPORT_SYMBOL_GPL(slbc_scmi_init);
 void slbc_register_ipi_ops(struct slbc_ipi_ops *ops)
 {
 	ipi_ops = ops;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLC)
+	ipi_ops_ref = ops;
+#endif
 }
 EXPORT_SYMBOL_GPL(slbc_register_ipi_ops);
 

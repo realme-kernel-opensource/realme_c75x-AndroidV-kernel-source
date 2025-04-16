@@ -624,6 +624,27 @@ void mtu3_ao_rg_dump(void)
 	}
 }
 
+int ssusb_wait_power_state(struct ssusb_mtk *ssusb,
+	enum mtu3_power_state state)
+{
+	u32 val = 0;
+
+	if (IS_ERR_OR_NULL(usb_mbist))
+		return -1;
+
+	while (time_before(jiffies, jiffies + (HZ*5))) {
+		regmap_read(usb_mbist, 0x34, &val);
+		pr_notice("[MTU3] debug dump usb-mbist: %x\n", val);
+		if ((val & BIT(0)) == 0x1) {
+			pr_notice("[MTU3] debug dump usb-mbist done: %x\n", val);
+			return 0;
+		}
+		msleep(100);
+	}
+
+	return 0;
+}
+
 static int ssusb_pd_event(struct notifier_block *nb,
 				  unsigned long flags , void *data)
 {

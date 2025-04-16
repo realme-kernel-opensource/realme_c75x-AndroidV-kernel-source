@@ -147,4 +147,20 @@ config MTK_V4L2_IMGSENSOR
 	  To compile this driver as a module, choose M here: the
 	  module wll be called imgsensor.
 
+config MACH_CAMERA_MT6877
+	tristate "MACH_CAMERA_MT6877 for MT6877"
+	help
+	  This is a driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module will be called MACH_CAMERA_MT6877.
+
+config MACH_CAMERA_MT6833
+	tristate "MACH_CAMERA_MT6833 for MT6833"
+	help
+	  This is a driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module will be called MACH_CAMERA_MT6833.
+
 source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/imgsensor/src/Kconfig"

@@ -2517,9 +2517,10 @@ s32 cmdq_pkt_poll_sleep(struct cmdq_pkt *pkt, u32 value,
 	s32 err;
 	const u16 reg_idx = CMDQ_THR_SPR_IDX1;
 	bool spr3_timer = pkt->support_spr3_timer;
+	struct cmdq_client *cl = pkt->cl;
 
-	if (!spr3_timer) {
-		cmdq_msg("pkt:0x%p skip poll_sleep", pkt);
+	if (!spr3_timer || !cl) {
+		cmdq_log("pkt %p poll sleep not support or no client", pkt);
 		return -EINVAL;
 	}
 
@@ -2529,6 +2530,9 @@ s32 cmdq_pkt_poll_sleep(struct cmdq_pkt *pkt, u32 value,
 		if (err != 0)
 			return err;
 	}
+
+	/* set timer event for current thread */
+	cmdq_pkt_set_event(pkt, cmdq_mbox_chan_id(cl->chan) + CMDQ_EVENT_SPR_TIMER);
 
 	cmdq_pkt_assign_command(pkt, reg_idx, (dma_addr_t)addr | CMDQ_ADDR_LOW_BIT);
 
@@ -2820,6 +2824,49 @@ s32 cmdq_pkt_poll_timeout(struct cmdq_pkt *pkt, u32 value, u8 subsys,
 		addr, mask, count, reg_gpr, NULL);
 }
 EXPORT_SYMBOL(cmdq_pkt_poll_timeout);
+
+void cmdq_pkt_sleep_by_poll(struct cmdq_pkt *pkt, u32 tick)
+{
+	struct cmdq_client *cl = (struct cmdq_client *)pkt->cl;
+	struct cmdq_operand lop, rop;
+	const u32 timeout_en = cmdq_mbox_get_base_pa(cl->chan) +
+		CMDQ_TPR_TIMEOUT_EN;
+	u32 begin_mark;
+	dma_addr_t cmd_pa;
+
+	cmdq_pkt_write_indriect(pkt, NULL, timeout_en, CMDQ_CPR_TPR_MASK, ~0);
+
+	if (tick < U16_MAX) {
+		lop.reg = true;
+		lop.idx = CMDQ_TPR_ID;
+		rop.reg = false;
+		rop.value = tick;
+		cmdq_pkt_logic_command(pkt, CMDQ_LOGIC_ADD,
+			CMDQ_THR_SPR_IDX1, &lop, &rop);
+	} else {
+		cmdq_pkt_assign_command(pkt, CMDQ_THR_SPR_IDX2, tick);
+		lop.reg = true;
+		lop.idx = CMDQ_TPR_ID;
+		rop.reg = true;
+		rop.value = CMDQ_THR_SPR_IDX2;
+		cmdq_pkt_logic_command(pkt, CMDQ_LOGIC_ADD,
+			CMDQ_THR_SPR_IDX1, &lop, &rop);
+	}
+	begin_mark = pkt->cmd_buf_size;
+	cmd_pa = cmdq_pkt_get_pa_by_offset(pkt, begin_mark);
+	cmdq_pkt_assign_command(pkt, CMDQ_SPR_FOR_TEMP, cmd_pa);
+
+	lop.reg = true;
+	lop.idx = CMDQ_THR_SPR_IDX1;
+	rop.reg = true;
+	rop.idx = CMDQ_TPR_ID;
+	cmdq_pkt_cond_jump_abs(pkt, CMDQ_SPR_FOR_TEMP, &lop, &rop,
+		CMDQ_GREATER_THAN);
+
+	cmdq_pkt_write_indriect(pkt, NULL, timeout_en, 0, ~0);
+
+}
+EXPORT_SYMBOL(cmdq_pkt_sleep_by_poll);
 
 void cmdq_pkt_perf_begin(struct cmdq_pkt *pkt)
 {

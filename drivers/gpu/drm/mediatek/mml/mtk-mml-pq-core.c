@@ -534,6 +534,16 @@ void mml_pq_get_readback_buffer(struct mml_task *task, u8 pipe,
 		mml_pq_rb_msg("%s aal get buffer from list jobid[%d] va[%p] pa[%pad]",
 			__func__, task->job.jobid, temp_buffer->va, &temp_buffer->pa);
 	} else {
+		buffer_num++;
+		is_buf_limit_exceed = check_pq_buf_limit(buffer_num, RB_BUF_LIMIT);
+		if (is_buf_limit_exceed) {
+			buffer_num--;
+			*hist = NULL;
+			mutex_unlock(&rb_buf_list_mutex);
+			mml_pq_err("%s buffer pool size exceed", __func__);
+			return;
+		}
+
 		temp_buffer = kzalloc(sizeof(struct mml_pq_readback_buffer),
 			GFP_KERNEL);
 
@@ -543,10 +553,7 @@ void mml_pq_get_readback_buffer(struct mml_task *task, u8 pipe,
 			return;
 		}
 		INIT_LIST_HEAD(&temp_buffer->buffer_list);
-		buffer_num++;
-		is_buf_limit_exceed = check_pq_buf_limit(buffer_num, RB_BUF_LIMIT);
-		if (is_buf_limit_exceed)
-			mml_pq_err("%s buffer pool size exceed", __func__);
+
 		*hist = temp_buffer;
 		mml_pq_rb_msg("%s aal reallocate jobid[%d] va[%p] pa[%pad]", __func__,
 			task->job.jobid, temp_buffer->va, &temp_buffer->pa);
@@ -617,6 +624,17 @@ void get_dma_buffer(struct mml_task *task, u8 pipe,
 		mml_pq_msg("%s get buffer from list jobid[%d] va[%p] pa[%pad]",
 			__func__, task->job.jobid, temp_buffer->va, &temp_buffer->pa);
 	} else {
+		dma_buf_num++;
+		is_buf_limit_exceed = check_pq_buf_limit(dma_buf_num, DMA_BUF_LIMIT);
+		if (is_buf_limit_exceed) {
+			dma_buf_num--;
+			*buf = NULL;
+			mml_pq_err("%s buffer pool size exceed", __func__);
+			if (list_lock)
+				mutex_unlock(list_lock);
+			return;
+		}
+
 		temp_buffer = kzalloc(sizeof(struct mml_pq_dma_buffer), GFP_KERNEL);
 
 		if (unlikely(!temp_buffer)) {
@@ -626,10 +644,6 @@ void get_dma_buffer(struct mml_task *task, u8 pipe,
 			return;
 		}
 		INIT_LIST_HEAD(&temp_buffer->buffer_list);
-		dma_buf_num++;
-		is_buf_limit_exceed = check_pq_buf_limit(dma_buf_num, DMA_BUF_LIMIT);
-		if (is_buf_limit_exceed)
-			mml_pq_err("%s buffer pool size exceed", __func__);
 		*buf = temp_buffer;
 	}
 

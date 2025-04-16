@@ -2021,6 +2021,8 @@ static s32 rrot_config_tile(struct mml_comp *comp, struct mml_task *task,
 			rrot_frm->datasize,
 			dest->rotate);
 
+	mml_mmp(rrot_size, MMPROFILE_FLAG_PULSE, comp->id, rrot_frm->datasize);
+
 	return 0;
 }
 

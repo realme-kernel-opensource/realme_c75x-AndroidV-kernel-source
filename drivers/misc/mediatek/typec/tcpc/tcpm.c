@@ -26,6 +26,19 @@ static int tcpm_check_typec_attached(struct tcpc_device *tcpc)
 	return TCPM_SUCCESS;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/*oplus add for pd svooc*/
+bool tcpm_inquire_pdphy_ready(struct tcpc_device *tcpc)
+{
+	if (tcpc->pd_inited_flag) {
+		return true;
+	} else {
+		return false;
+	}
+}
+EXPORT_SYMBOL(tcpm_inquire_pdphy_ready);
+#endif
+
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 int tcpm_check_pd_attached(struct tcpc_device *tcpc)
 {
@@ -1243,6 +1256,7 @@ int tcpm_dpm_vdm_discover_id(struct tcpc_device *tcpc,
 }
 EXPORT_SYMBOL(tcpm_dpm_vdm_discover_id);
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 int tcpm_dpm_vdm_discover_svids(struct tcpc_device *tcpc,
 	const struct tcp_dpm_event_cb_data *cb_data)
 {
@@ -1254,6 +1268,19 @@ int tcpm_dpm_vdm_discover_svids(struct tcpc_device *tcpc,
 		tcpc, &tcp_event, cb_data, TCPM_BK_PD_CMD_TOUT);
 }
 EXPORT_SYMBOL(tcpm_dpm_vdm_discover_svids);
+#else
+int tcpm_dpm_vdm_discover_svid(struct tcpc_device *tcpc,
+	const struct tcp_dpm_event_cb_data *cb_data)
+{
+	struct tcp_dpm_event tcp_event = {
+		.event_id = TCP_DPM_EVT_DISCOVER_SVIDS,
+	};
+
+	return tcpm_put_tcp_dpm_event_cbk1(
+		tcpc, &tcp_event, cb_data, TCPM_BK_PD_CMD_TOUT);
+}
+EXPORT_SYMBOL(tcpm_dpm_vdm_discover_svid);
+#endif
 
 int tcpm_dpm_vdm_discover_modes(struct tcpc_device *tcpc,
 	uint16_t svid, const struct tcp_dpm_event_cb_data *cb_data)

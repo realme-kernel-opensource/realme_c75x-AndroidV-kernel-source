@@ -48,6 +48,9 @@ void mtk_dump_cur_pos(struct mtk_ddp_comp *comp)
 	case DDP_COMPONENT_OVL3_2L_NWCG:
 		mtk_ovl_cur_pos_dump(comp);
 		break;
+	case DDP_COMPONENT_OVL0_BLENDER6:
+		mtk_ovl_blender_cur_pos_dump(comp);
+		break;
 	case DDP_COMPONENT_DSI0:
 	case DDP_COMPONENT_DSI1:
 		mtk_dsi_cur_pos_dump(comp);
@@ -153,6 +156,7 @@ int mtk_dump_reg(struct mtk_ddp_comp *comp)
 	case DDP_COMPONENT_WDMA1:
 	case DDP_COMPONENT_WDMA2:
 	case DDP_COMPONENT_WDMA3:
+	case DDP_COMPONENT_WDMA4:
 	case DDP_COMPONENT_UFBC_WDMA0:
 	case DDP_COMPONENT_UFBC_WDMA1:
 	case DDP_COMPONENT_UFBC_WDMA2:
@@ -266,11 +270,13 @@ int mtk_dump_reg(struct mtk_ddp_comp *comp)
 	case DDP_COMPONENT_R2Y0:
 		mtk_r2y_dump(comp);
 		break;
+	case DDP_COMPONENT_DLO_ASYNC0:
 	case DDP_COMPONENT_DLO_ASYNC3:
 	case DDP_COMPONENT_DLO_ASYNC7:
 	case DDP_COMPONENT_OVLSYS_DLO_ASYNC0:
 		mtk_dlo_async_dump(comp);
 		break;
+	case DDP_COMPONENT_DLI_ASYNC0:
 	case DDP_COMPONENT_DLI_ASYNC3:
 	case DDP_COMPONENT_DLI_ASYNC7:
 	case DDP_COMPONENT_OVLSYS_DLI_ASYNC0:
@@ -376,6 +382,7 @@ int mtk_dump_analysis(struct mtk_ddp_comp *comp)
 	case DDP_COMPONENT_WDMA1:
 	case DDP_COMPONENT_WDMA2:
 	case DDP_COMPONENT_WDMA3:
+	case DDP_COMPONENT_WDMA4:
 	case DDP_COMPONENT_UFBC_WDMA0:
 	case DDP_COMPONENT_UFBC_WDMA1:
 	case DDP_COMPONENT_UFBC_WDMA2:

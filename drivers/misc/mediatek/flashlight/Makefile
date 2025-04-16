@@ -19,6 +19,15 @@ obj-$(CONFIG_MTK_FLASHLIGHT_MT6360)      += flashlights-mt6360.o
 obj-$(CONFIG_MTK_FLASHLIGHT_AW3644)      += flashlights-aw3644.o
 obj-$(CONFIG_MTK_FLASHLIGHT_DUMMY)       += flashlights-dummy.o
 obj-$(CONFIG_MTK_FLASHLIGHT_DUMMY_GPIO)  += flashlights-dummy-gpio.o
+obj-$(CONFIG_MTK_FLASHLIGHT_ALADDIN)     += flashlights-aladdin.o
+obj-$(CONFIG_MTK_FLASHLIGHT_SY6560)      += flashlights-sy6560.o
+obj-$(CONFIG_MTK_FLASHLIGHT_ATOM)        += flashlights-atom.o
+obj-$(CONFIG_MTK_FLASHLIGHT_MIAMI)       += flashlights-miami.o
+obj-$(CONFIG_MTK_FLASHLIGHT_ARK)         += flashlights-ark.o
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+obj-y += ./oplus/flashlight_custom.o
+#endif
+obj-$(CONFIG_MTK_FLASHLIGHT_ORISA)         += flashlights-orisa.o
 
 ccflags-$(CONFIG_MTK_FLASHLIGHT_DEBUG)     := -DDEBUG
 ccflags-$(CONFIG_MTK_FLASHLIGHT_PT)        += -DCONFIG_MTK_FLASHLIGHT_PT

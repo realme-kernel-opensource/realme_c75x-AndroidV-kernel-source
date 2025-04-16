@@ -208,4 +208,10 @@ config SND_SOC_HFDA80X
 	help
 	  Config of hfda80x. It is a Smart amplifier
 	  It would be set to yes if device with HFDA801/HFDA803 on it.
+
+#ifdef OPLUS_ARCH_EXTENDS
+# Add for audio extern
+source "$(KCONFIG_EXT_PREFIX)sound/soc/codecs/audio/Kconfig"
+#endif /* OPLUS_ARCH_EXTENDS */
+
 endmenu

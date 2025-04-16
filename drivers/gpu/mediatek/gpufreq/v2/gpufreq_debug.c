@@ -307,6 +307,25 @@ done:
 	return ret;
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_POWERMODEL)
+int get_stack_working_regulator_volt(int *volt)
+{
+	int ret = GPUFREQ_SUCCESS;
+	if(g_shared_status) {
+		/* mutex_lock(&gpufreq_debug_lock);*/
+		gpufreq_update_debug_opp_info();
+		*volt = g_shared_status->cur_regulator_vstack;
+		/*mutex_unlock(&gpufreq_debug_lock);*/
+	}
+	else {
+		*volt = 0;
+		GPUFREQ_LOGE("fail to get GPU stack working regulator volt");
+	}
+	return ret;
+}
+EXPORT_SYMBOL(get_stack_working_regulator_volt);
+#endif
+
 static int gpu_signed_opp_table_proc_show(struct seq_file *m, void *v)
 {
 	const struct gpufreq_opp_info *opp_table = NULL;

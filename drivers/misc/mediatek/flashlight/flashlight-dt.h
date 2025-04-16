@@ -22,7 +22,19 @@
 #define RT4505_DTNAME     "mediatek,flashlights_rt4505"
 #define RT4505_DTNAME_I2C "mediatek,strobe_main"
 #define RT5081_DTNAME     "mediatek,flashlights_rt5081"
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#define ALADDIN_DTNAME    "mediatek,flashlights_aladdin"
+#define ATOM_DTNAME       "mediatek,flashlights_atom"
+#define ALADDIN_DTNAME_I2C "mediatek,strobe_main"
+#define ATOM_DTNAME_I2C    "mediatek,strobe_main"
+#define ARK_DTNAME        "mediatek,flashlights_ark"
+#define ARK_DTNAME_I2C    "mediatek,strobe_main"
+#endif //OPLUS_FEATURE_CAMERA_COMMON
 
+#define ORISC_DTNAME      "mediatek,flashlights_orisc"
+#define ORISC_DTNAME_I2C  "mediatek,strobe_main"
+#define ORISA_DTNAME      "mediatek,flashlights_orisa"
+#define ORISA_DTNAME_I2C  "mediatek,strobe_main"
 #define AW3644_DTNAME_I2C "mediatek,strobe_main"
 #define AW3644_DTNAME     "mediatek,flashlights_aw3644"
 #endif /* _FLASHLIGHT_DT_H */

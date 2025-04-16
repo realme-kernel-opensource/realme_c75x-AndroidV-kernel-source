@@ -232,6 +232,7 @@ static int mt6360_regulator_enable(struct regulator_dev *rdev)
 	struct regmap *regmap = rdev_get_regmap(rdev);
 	int id = rdev_get_id(rdev), ret;
 
+
 	ret = regmap_update_bits(regmap, desc->enable_reg,
 				 desc->enable_mask, 0xff);
 	if (ret < 0) {

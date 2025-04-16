@@ -703,6 +703,7 @@ static void vow_service_Init(void)
 	vowserv.tx_keyword_start = false;
 	/*Initialization*/
 #if IS_ENABLED(CONFIG_MTK_TINYSYS_SCP_SUPPORT)
+
 	if (!vow_check_scp_status()) {
 		VOWDRV_DEBUG("SCP is off, do not support VOW\n");
 		scp_is_ready = false;
@@ -1142,13 +1143,26 @@ static bool vow_service_SetSpeakerModel(unsigned long arg)
 	char *ptr8;
 #endif
 
+#ifndef OPLUS_ARCH_EXTENDS
 	I = vow_service_FindFreeSpeakerModel();
 	if (I == -1)
 		return false;
+#endif /* OPLUS_ARCH_EXTENDS */
 
 	if (vow_service_GetParameter(arg) != 0)
 		return false;
+#ifdef OPLUS_ARCH_EXTENDS
+	I = vow_service_SearchSpeakerModelWithKeyword(vowserv.vow_info_apuser[1]);
+	if (I < 0) {
+		I = vow_service_FindFreeSpeakerModel();
+		if (I == -1) {
+			return false;
+                }
+	}
+#endif
+
 #if IS_ENABLED(CONFIG_MTK_TINYSYS_SCP_SUPPORT)
+
 	if (!vow_check_scp_status()) {
 		VOWDRV_DEBUG("%s(): SCP is off\n", __func__);
 		return false;
@@ -2232,6 +2246,7 @@ static int vow_pcm_dump_set(bool enable)
 		     vowserv.dump_pcm_flag,
 		     (unsigned int)enable);
 #if IS_ENABLED(CONFIG_MTK_TINYSYS_SCP_SUPPORT)
+
 	if (!vow_check_scp_status()) {
 		VOWDRV_DEBUG("%s(): SCP is off\n", __func__);
 		return 0;

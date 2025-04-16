@@ -463,6 +463,13 @@ static int dvfsrc_aee_trigger(struct mtk_dvfsrc *dvfsrc, u32 aee_type)
 	return NOTIFY_DONE;
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLC)
+int osml_get_dvfsrc_sw_bw(int idx) {
+	return dvfsrc_drv ? get_dvfsrc_sw_bw(dvfsrc_drv, idx) : -1;
+}
+EXPORT_SYMBOL(osml_get_dvfsrc_sw_bw);
+#endif
+
 static int dvfsrc_get_vcore_voltage(struct mtk_dvfsrc *dvfsrc)
 {
 	int ret;

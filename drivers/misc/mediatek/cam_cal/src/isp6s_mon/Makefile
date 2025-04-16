@@ -24,4 +24,5 @@ $(MTK_PLATFORM_KO)-objs += ../common/$(COMMON_VERSION)/eeprom_utils.o
 
 # Platform code
 $(MTK_PLATFORM_KO)-objs += eeprom_i2c_custom_driver.o
+$(MTK_PLATFORM_KO)-objs += otp_insensor_dev.o
 $(MTK_PLATFORM_KO)-objs += cam_cal_list.o

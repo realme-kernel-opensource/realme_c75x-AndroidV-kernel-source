@@ -10,6 +10,10 @@
  * Marco
  *****************************************************************************/
 
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
+#define OPLUS_FEATURE_CAMERA_COMMON
+#endif
+
 #define CAM_CAL_MAX_LSC_SIZE 0x840
 #define MAX_SENSOR_CAL_SIZE             (2048)
 #define CAM_CAL_SINGLE_LSC_SIZE 0x74c
@@ -49,6 +53,16 @@ enum ENUM_CAMERA_CAM_CAL_TYPE_ENUM {
 	CAMERA_CAM_CAL_DATA_SHADING_TABLE,
 	CAMERA_CAM_CAL_DATA_3A_GAIN,
 	CAMERA_CAM_CAL_DATA_PDAF,
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+/* zhangchao@cam.algo.[5195022],2023/07/14 add for oplusPD */
+	CAMERA_CAM_CAL_DATA_QC_HEADER_PDAF,
+	CAMERA_CAM_CAL_DATA_QC_PDAF,
+	CAMERA_CAM_CAL_DATA_QC_OFFSET_PDAF,
+	CAMERA_CAM_CAL_DATA_QC_HEADER_PDAF_1,
+	CAMERA_CAM_CAL_DATA_QC_PDAF_1,
+	CAMERA_CAM_CAL_DATA_QC_OFFSET_PDAF_1,
+	CAMERA_CAM_CAL_DATA_QC_OFFSET_PDAF_2,
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 	CAMERA_CAM_CAL_DATA_STEREO_DATA,
 	CAMERA_CAM_CAL_DATA_DUMP,
 	CAMERA_CAM_CAL_DATA_LENS_ID,
@@ -145,6 +159,25 @@ struct STRUCT_CAM_CAL_PREGAIN_STRUCT {
 	unsigned char rGoldenGr;
 	unsigned char rGoldenGb;
 	unsigned char rGoldenB;
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	unsigned int r1RG_avg_lnt;
+	unsigned int r1RG_avg_dec;
+	unsigned int r1BG_avg_lnt;
+	unsigned int r1BG_avg_dec;
+	unsigned int r1GoldenRG_lnt;
+	unsigned int r1GoldenRG_dec;
+	unsigned int r1GoldenBG_lnt;
+	unsigned int r1GoldenBG_dec;
+	unsigned int r2RG_avg_lnt;
+	unsigned int r2RG_avg_dec;
+	unsigned int r2BG_avg_lnt;
+	unsigned int r2BG_avg_dec;
+	unsigned int r2GoldenRG_lnt;
+	unsigned int r2GoldenRG_dec;
+	unsigned int r2GoldenBG_lnt;
+	unsigned int r2GoldenBG_dec;
+#endif /* OPLUS_FEATURE_CAMERA_COMMON */
 };
 
 struct STRUCT_CAM_CAL_AF_STRUCT {
@@ -172,6 +205,20 @@ struct STRUCT_CAM_CAL_SINGLE_2A_STRUCT {
 	unsigned char  S2aBitEn; //bit enable: 03 Bit0: AF Bit1: WB
 	unsigned char  S2aAfBitflagEn; //Bit: step 0(inf.), 1(marco), 2, 3, 4,5,6,7
 	unsigned short S2aAf[8];      //0x012c
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	int InfFlag;
+	int PhoneInfDac;
+	int InfSkinTemp;
+	int InfAmbientTemp;
+	int InfSensorTemp;
+	int InfGyroZ;
+	int MacroFlag;
+	int PhoneMacroDac;
+	int MacroSkinTemp;
+	int MacroAmbientTemp;
+	int MacroSensorTemp;
+	int MacroGyroZ;
+#endif /* OPLUS_FEATURE_CAMERA_COMMON */
 	struct STRUCT_CAM_CAL_PREGAIN_STRUCT S2aAwb; //0x012c
 	struct STRUCT_CAM_CAL_AF_STRUCT S2aAF_t;
 };

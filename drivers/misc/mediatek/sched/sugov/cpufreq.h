@@ -72,6 +72,9 @@ struct sugov_policy {
 
 	bool			limits_changed;
 	bool			need_freq_update;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	unsigned int	flags;
+#endif
 };
 
 struct dsu_state {
@@ -271,6 +274,9 @@ extern void (*set_v_driver_hook)(int v);
 #define for_each_collab_type(collab_type) for (collab_type = 0; collab_type < nr_collab_type; collab_type++)
 int collab_type_0_ret_function(void);
 extern int get_sys_max_cap_cluster(void);
+extern void set_curr_task_uclamp_ctrl(int set);
+extern void unset_curr_task_uclamp_ctrl(void);
+extern int get_curr_task_uclamp_ctrl(void);
 
 #define DPT_CALL_UPDATE_WL_TBL 0
 #define DPT_CALL_UPDATE_CURR_COLLAB_STATE 1

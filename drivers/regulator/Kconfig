@@ -214,6 +214,16 @@ config REGULATOR_RT5133
 	  GPIO cannot be used to drive output high. It need to pay more
 	  attention on the usage.
 
+config REGULATOR_SM5109_TPS65132
+        tristate "SM5109 &  TPS6236x Power Regulator"
+        depends on I2C
+        select REGMAP_I2C
+        help
+          This driver supports TPS6236x voltage regulator chip. This
+          regulator is meant for processor core supply. This chip is
+          high-frequency synchronous step down dc-dc converter optimized
+          for battery-powered portable applications.
+
 config DEVICE_MODULES_REGULATOR_RT6160
 	tristate "Richtek RT6160 BuckBoost voltage regulator"
 	depends on I2C

@@ -16,6 +16,8 @@ obj-$(CONFIG_CUSTOM_KERNEL_STEP_COUNTER)	+= step_counter/
 obj-$(CONFIG_CUSTOM_KERNEL_SIGNIFICANT_MOTION_SENSOR)	+= step_counter/
 obj-$(CONFIG_CUSTOM_KERNEL_SITUATION) += situation/
 obj-$(CONFIG_CUSTOM_KERNEL_SENSOR_FUSION) += sensorfusion/
+obj-$(CONFIG_CUSTOM_KERNEL_REAR_ALS) += rear_als/
+obj-$(CONFIG_CUSTOM_KERNEL_REAR_FLICKER) += rear_flicker/
 endif
 else
 obj-y += dummy.o

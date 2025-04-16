@@ -35,12 +35,33 @@
 #include "mtk_disp_bdg.h"
 #include "mtk_dsi.h"
 
+#ifdef OPLUS_FEATURE_DISPLAY
+#include <mt-plat/mtk_boot_common.h>
+#include "oplus_display_interface.h"
+#endif /* OPLUS_FEATURE_DISPLAY */
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+#include "oplus_display_onscreenfingerprint.h"
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
+#ifdef OPLUS_TRACKPOINT_REPORT
+#include "oplus_display_trackpoint_report.h"
+#endif /* OPLUS_TRACKPOINT_REPORT */
+
 #define ESD_TRY_CNT 5
 #define ESD_CHK_TRY_CNT 5
 #define ESD_CHECK_PERIOD 2000 /* ms */
 #define esd_timer_to_mtk_crtc(x) container_of(x, struct mtk_drm_crtc, esd_timer)
 
+int debug_force_esd;
+module_param(debug_force_esd, int, 0644);
+
 static DEFINE_MUTEX(pinctrl_lock);
+
+#ifdef OPLUS_FEATURE_DISPLAY
+unsigned long oplus_esd_triggered = 0;
+EXPORT_SYMBOL(oplus_esd_triggered);
+extern int get_boot_mode(void);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 /* pinctrl implementation */
 long _set_state(struct drm_crtc *crtc, const char *name)
@@ -128,13 +149,7 @@ static inline int need_wait_esd_eof(struct drm_crtc *crtc,
 {
 	int ret = 1;
 
-	/*
-	 * 1.vdo mode
-	 * 2.cmd mode te
-	 */
-	if (!mtk_crtc_is_frame_trigger_mode(crtc))
-		ret = 0;
-
+	/* cmd mode te */
 	if (panel_ext->params->cust_esd_check == 0)
 		ret = 0;
 
@@ -189,10 +204,8 @@ int _mtk_esd_check_read(struct drm_crtc *crtc)
 		return -EINVAL;
 	}
 
-	if (mtk_drm_is_idle(crtc) && mtk_dsi_is_cmd_mode(output_comp)) {
-		DDPINFO("[ESD%u]%s esd check in idle\n", index, __func__);
-		mtk_drm_idlemgr_kick(__func__, &mtk_crtc->base, index);
-	}
+	if (mtk_drm_is_idle(crtc) && mtk_dsi_is_cmd_mode(output_comp))
+		mtk_drm_idlemgr_kick(__func__, crtc, 0);
 
 	mtk_ddp_comp_io_cmd(output_comp, NULL, REQ_PANEL_EXT, &panel_ext);
 	if (unlikely(!(panel_ext && panel_ext->params))) {
@@ -237,6 +250,8 @@ int _mtk_esd_check_read(struct drm_crtc *crtc)
 		else
 			mtk_crtc_wait_frame_done(mtk_crtc, cmdq_handle, DDP_FIRST_PATH,
 						 (mtk_crtc->is_mml || mtk_crtc->is_mml_dl) ? 0 : 1);
+		cmdq_pkt_wfe(cmdq_handle,
+				mtk_crtc->gce_obj.event[EVENT_VDO_CABC_EOF]);
 
 		if (mtk_crtc->msync2.msync_on) {
 			u32 vfp_early_stop = 1;
@@ -258,6 +273,8 @@ int _mtk_esd_check_read(struct drm_crtc *crtc)
 		mtk_ddp_comp_io_cmd(output_comp, cmdq_handle,
 				    DSI_START_VDO_MODE, NULL);
 
+		cmdq_pkt_set_event(cmdq_handle,
+				mtk_crtc->gce_obj.event[EVENT_VDO_CABC_EOF]);
 		mtk_disp_mutex_trigger(mtk_crtc->mutex[0], cmdq_handle);
 		mtk_ddp_comp_io_cmd(output_comp, cmdq_handle, COMP_REG_START,
 				    NULL);
@@ -290,9 +307,13 @@ int _mtk_esd_check_read(struct drm_crtc *crtc)
 			mtk_crtc_pkt_create(&cmdq_handle2, crtc,
 				mtk_crtc->gce_obj.client[CLIENT_CFG]);
 
-			cmdq_pkt_set_event(
-				cmdq_handle2,
-				mtk_crtc->gce_obj.event[EVENT_CABC_EOF]);
+			if (mtk_dsi_is_cmd_mode(output_comp))
+				cmdq_pkt_set_event(cmdq_handle2,
+					mtk_crtc->gce_obj.event[EVENT_CABC_EOF]);
+			else
+				cmdq_pkt_set_event(cmdq_handle2,
+					mtk_crtc->gce_obj.event[EVENT_VDO_CABC_EOF]);
+
 			cmdq_pkt_flush(cmdq_handle2);
 			cmdq_pkt_destroy(cmdq_handle2);
 		}
@@ -352,6 +373,13 @@ static int _mtk_esd_check_eint(struct drm_crtc *crtc)
 	else
 		disable_irq(esd_ctx->eint_irq);
 	atomic_set(&esd_ctx->ext_te_event, 0);
+
+#ifdef OPLUS_TRACKPOINT_REPORT
+	if (ret) {
+		DDPPR_ERR("%s:TE timeout\n", __func__);
+		display_exception_trackpoint_report("DisplayDriverID@@511$$ TE timeout");
+	}
+#endif
 
 	return ret;
 }
@@ -451,9 +479,14 @@ static int mtk_drm_esd_check(struct drm_crtc *crtc)
 	}
 
 	/* switch ESD check mode */
+#ifdef OPLUS_FEATURE_DISPLAY_MAINLINE
+	if (_can_switch_check_mode(crtc, panel_ext) ||
+		!mtk_crtc_is_frame_trigger_mode(crtc))
+#else
 	if (_can_switch_check_mode(crtc, panel_ext) &&
-	    !mtk_crtc_is_frame_trigger_mode(crtc) &&
-	    esd_ctx->chk_retry == 0)
+		!mtk_crtc_is_frame_trigger_mode(crtc) &&
+		esd_ctx->chk_retry == 0)
+#endif
 		esd_ctx->chk_mode =
 			(esd_ctx->chk_mode == READ_EINT) ? READ_LCM : READ_EINT;
 
@@ -472,6 +505,7 @@ static int mtk_drm_esd_recover(struct drm_crtc *crtc)
 	struct cmdq_pkt *cmdq_handle = NULL;
 	int index = drm_crtc_index(crtc);
 	struct mtk_dsi *dsi = NULL;
+	bool skip_refresh = false;
 
 	CRTC_MMP_EVENT_START(index, esd_recovery, 0, 0);
 	if (crtc->state && !crtc->state->active) {
@@ -553,7 +587,9 @@ static int mtk_drm_esd_recover(struct drm_crtc *crtc)
 	CRTC_MMP_MARK(index, esd_recovery, 0, 4);
 
 	mtk_crtc_hw_block_ready(crtc);
-	if (mtk_crtc_is_frame_trigger_mode(crtc)) {
+
+	skip_refresh = mtk_crtc->is_mml || mtk_crtc->is_mml_dl || mtk_crtc->skip_check_trigger;
+	if (mtk_crtc_is_frame_trigger_mode(crtc) && !skip_refresh) {
 		struct cmdq_pkt *cmdq_handle;
 
 		mtk_crtc_pkt_create(&cmdq_handle, &mtk_crtc->base,
@@ -588,6 +624,11 @@ int mtk_drm_esd_testing_process(struct mtk_drm_esd_ctx *esd_ctx, bool need_lock)
 		int ret = 0;
 		int i = 0;
 		int recovery_flg = 0;
+#ifdef OPLUS_FEATURE_DISPLAY
+#ifdef OPLUS_FEATURE_DISPLAY_MAINLINE
+		struct dsi_panel_lcm *ctx = NULL;
+#endif /* OPLUS_FEATURE_DISPLAY_MAINLINE*/
+#endif /* OPLUS_FEATURE_DISPLAY */
 		unsigned int crtc_idx = 0;
 
 		if (!esd_ctx) {
@@ -622,14 +663,37 @@ int mtk_drm_esd_testing_process(struct mtk_drm_esd_ctx *esd_ctx, bool need_lock)
 		do {
 			mtk_drm_trace_begin("esd loop:%d", i);
 			ret = mtk_drm_esd_check(crtc);
-			if (!ret) /* success */
+			if (!ret && !debug_force_esd) /* success */
 				break;
 
+			if (debug_force_esd)
+				debug_force_esd = 0;
+
+#ifdef OPLUS_FEATURE_DISPLAY
+#ifdef OPLUS_FEATURE_DISPLAY_MAINLINE
+			ctx = oplus_mtkCrtc_to_panel(mtk_crtc);
+			if (ctx) {
+				ctx->esd_is_triggered = true;
+			}
+#else
+				oplus_esd_triggered = 1;
+#endif /* OPLUS_FEATURE_DISPLAY_MAINLINE*/
+#endif /* OPLUS_FEATURE_DISPLAY */
 			DDPPR_ERR("[ESD%u]esd check fail, will do esd recovery. try=%d\n",
 				crtc_idx, i);
 			mtk_drm_esd_recover(crtc);
 			recovery_flg = 1;
+			mtk_crtc->recovery_flg = true;
 			mtk_drm_trace_end();
+#ifdef OPLUS_FEATURE_DISPLAY
+#ifdef OPLUS_FEATURE_DISPLAY_MAINLINE
+			if (ctx) {
+				ctx->esd_is_triggered = false;
+			}
+#else
+			oplus_esd_triggered = 0;
+#endif /* OPLUS_FEATURE_DISPLAY_MAINLINE*/
+#endif /* OPLUS_FEATURE_DISPLAY */
 		} while (++i < ESD_TRY_CNT);
 
 		if (ret != 0) {
@@ -696,6 +760,11 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 	struct sched_param param = {.sched_priority = 87};
 	struct mtk_drm_esd_ctx *esd_ctx = (struct mtk_drm_esd_ctx *)data;
 	int ret = 0, index = 0;
+#ifdef OPLUS_FEATURE_DISPLAY
+	struct drm_crtc *crtc = NULL;
+	struct mtk_drm_crtc *mtk_crtc = NULL;
+	struct mtk_crtc_state *mtk_state = NULL;
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	sched_setscheduler(current, SCHED_RR, &param);
 
@@ -704,11 +773,36 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 
 		return -EINVAL;
 	}
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (esd_ctx->crtc) {
+		index = drm_crtc_index(esd_ctx->crtc);
+		crtc = esd_ctx->crtc;
+		if (!crtc) {
+			DDPPR_ERR("%s invalid CRTC context, stop thread\n", __func__);
+			return -EINVAL;
+		}
+		mtk_crtc = to_mtk_crtc(crtc);
+		if (!mtk_crtc) {
+			DDPPR_ERR("%s invalid mtk_crtc, stop thread\n", __func__);
+			return -EINVAL;
+		}
+	}
+#else /* OPLUS_FEATURE_DISPLAY */
 	if (esd_ctx->crtc)
 		index = drm_crtc_index(esd_ctx->crtc);
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	while (1) {
+#ifdef OPLUS_FEATURE_DISPLAY
+		if( (mtk_crtc->panel_ext && mtk_crtc->panel_ext->params) && (mtk_crtc->panel_ext->params->oplus_esd_sleep_status != 0) &&
+			(mtk_crtc->panel_ext->params->oplus_esd_sleep_ms != 0) ){
+				msleep(mtk_crtc->panel_ext->params->oplus_esd_sleep_ms);
+		}
+		else
+			msleep(ESD_CHECK_PERIOD);
+#else /* OPLUS_FEATURE_DISPLAY */
 		msleep(ESD_CHECK_PERIOD);
+#endif /* OPLUS_FEATURE_DISPLAY */
 		if (esd_ctx->chk_en == 0)
 			continue;
 
@@ -726,6 +820,33 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 				DDPINFO("[ESD]check thread waked up accidently\n");
 				continue;
 			}
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+			if (oplus_ofp_is_supported()) {
+				oplus_ofp_lhbm_pressed_icon_gamma_update(esd_ctx->crtc, NULL);
+			}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+#ifdef OPLUS_FEATURE_DISPLAY
+			if ((get_boot_mode() != RECOVERY_BOOT) && (get_boot_mode() != FACTORY_BOOT)) {
+				DDP_MUTEX_LOCK(&mtk_crtc->lock, __func__, __LINE__);
+				if (crtc->state && crtc->state->enable) {
+					mtk_state = to_mtk_crtc_state(crtc->state);
+					if (!mtk_state) {
+						DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+						DDPINFO("[ESD] mtk_state is null\n");
+						del_timer_sync(&esd_ctx->esd_timer);
+						continue;
+					}
+					if (mtk_state->prop_val[CRTC_PROP_DOZE_ACTIVE] || oplus_ofp_get_aod_state()
+							|| oplus_ofp_need_to_skip_esd_check_after_aod_off()) {
+						DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+						DDPINFO("[ESD] is in aod doze mode, skip esd check!\n");
+						del_timer_sync(&esd_ctx->esd_timer);
+						continue;
+					}
+				}
+				DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+			}
+#endif /* OPLUS_FEATURE_DISPLAY */
 			CRTC_MMP_MARK(index, esd_check, 0x57A7, esd_ctx->chk_retry);
 			del_timer_sync(&esd_ctx->esd_timer);
 			mtk_drm_esd_testing_process(esd_ctx, true);

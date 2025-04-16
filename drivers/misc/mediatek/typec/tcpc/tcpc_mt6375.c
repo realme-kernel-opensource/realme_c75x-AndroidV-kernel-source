@@ -9,6 +9,7 @@
 #include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/platform_device.h>
+#include <linux/kthread.h>
 #include <linux/cpu.h>
 #include <linux/iio/consumer.h>
 #include <linux/sched.h>
@@ -260,14 +261,39 @@
 #define MT6375_MSK_WD0_TDET	GENMASK(2, 0)
 #define MT6375_SFT_WD0_TDET	(0)
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+enum mt6375_debug_msg_type {
+	DEBUG_MSG_VCONN_RVP,
+	DEBUG_MSG_VCONN_OCP,
+	DEBUG_MSG_VCONN_OVP,
+	DEBUG_MSG_VCONN_UVP,
+	DEBUG_MSG_VCONN_OPEN,
+	DEBUG_MSG_VCONN_CLOSE,
+	DEBUG_MSG_POWER_STATUS_CHANGE,
+};
+
+struct mt6375_debug_data {
+	void *priv_data;
+	void (*msg_handler)(void *data, int msg_type);
+};
+#endif /* OPLUS_FEATURE_CHG_BASIC */
+
 struct mt6375_tcpc_data {
 	struct device *dev;
 	struct regmap *rmap;
 	struct tcpc_desc *desc;
 	struct tcpc_device *tcpc;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct kthread_worker irq_worker;
+	struct kthread_work irq_work;
+	struct task_struct *irq_worker_task;
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 	struct iio_channel *adc_iio;
 	int irq;
 	u16 did;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct mt6375_debug_data debug_data;
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 	bool vsc_status;
 	u8 short_cc;
 	u8 wd0_tsleep;
@@ -2625,6 +2651,38 @@ static const struct dev_pm_ops mt6375_tcpc_pm_ops = {
 	.suspend = mt6375_tcpc_suspend,
 	.resume = mt6375_tcpc_resume,
 };
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+int tcpc_mt6375_reg_debug_msg_handler(struct tcpc_device *tcpc,
+				      void (*msg_handler)(void *, int),
+				      void *priv_data)
+{
+	struct mt6375_tcpc_data *ddata;
+
+	if (tcpc == NULL || msg_handler == NULL)
+		return -EINVAL;
+
+	ddata = tcpc_get_dev_data(tcpc);
+	ddata->debug_data.priv_data = priv_data;
+	ddata->debug_data.msg_handler = msg_handler;
+
+	return 0;
+}
+EXPORT_SYMBOL(tcpc_mt6375_reg_debug_msg_handler);
+
+void tcpc_mt6375_unreg_debug_msg_handler(struct tcpc_device *tcpc)
+{
+	struct mt6375_tcpc_data *ddata;
+
+	if (tcpc == NULL)
+		return;
+
+	ddata = tcpc_get_dev_data(tcpc);
+	ddata->debug_data.priv_data = NULL;
+	ddata->debug_data.msg_handler = NULL;
+}
+EXPORT_SYMBOL(tcpc_mt6375_unreg_debug_msg_handler);
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 static const struct of_device_id __maybe_unused mt6375_tcpc_of_match[] = {
 	{ .compatible = "mediatek,mt6375-tcpc", },

@@ -110,7 +110,12 @@ int gpio_get_tristate_input(unsigned int pin)
 	/* set pullsel as pull-up and get input value */
 	pr_notice(FUN_3STATE ":pull up GPIO%d\n", pin);
 	ret = hw->soc->bias_set_combo(hw, desc, 1,
+#if IS_ENABLED(CONFIG_PINCTRL_MT6768)
+		(pull_type ? MTK_PUPD_SET_R1R0_01 : MTK_ENABLE));
+#else
 		(pull_type ? MTK_PUPD_SET_R1R0_11 : MTK_ENABLE));
+#endif
+
 	if (ret)
 		goto out;
 	mdelay(PULL_DELAY);
@@ -120,7 +125,12 @@ int gpio_get_tristate_input(unsigned int pin)
 	/* set pullsel as pull-down and get input value */
 	pr_notice(FUN_3STATE ":pull down GPIO%d\n", pin);
 	ret = hw->soc->bias_set_combo(hw, desc, 0,
+#if IS_ENABLED(CONFIG_PINCTRL_MT6768)
+		(pull_type ? MTK_PUPD_SET_R1R0_01 : MTK_ENABLE));
+#else
 		(pull_type ? MTK_PUPD_SET_R1R0_11 : MTK_ENABLE));
+#endif
+
 	if (ret)
 		goto out;
 	mdelay(PULL_DELAY);
@@ -144,6 +154,8 @@ out:
 
 	return ret;
 }
+
+EXPORT_SYMBOL_GPL(gpio_get_tristate_input);
 
 static int mtk_hw_set_value_wrap(struct mtk_pinctrl *hw, unsigned int gpio,
 	int value, int field)

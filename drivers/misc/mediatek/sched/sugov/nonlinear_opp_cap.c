@@ -246,6 +246,10 @@ int dsu_freq_agg(int cpu, int max_freq_in_gear, int quant, int wl, int *dsu_targ
 	return dsu_freq;
 }
 EXPORT_SYMBOL_GPL(dsu_freq_agg);
+int mtk_dsu_freq_piling = 0;
+int mtk_dsu_freq_real = 0;
+EXPORT_SYMBOL(mtk_dsu_freq_real);
+EXPORT_SYMBOL(mtk_dsu_freq_piling);
 
 void set_dsu_target_freq(struct cpufreq_policy *policy)
 {
@@ -306,6 +310,12 @@ skip_single_idle_cpu:
 
 	freq_state.dsu_target_freq = dsu_target_freq;
 	c->sb_ch = dsu_target_freq;
+	if (unlikely(mtk_dsu_freq_piling != 0)) {
+		c->sb_ch = mtk_dsu_freq_piling;
+		freq_state.dsu_target_freq = mtk_dsu_freq_piling;
+	}
+
+	mtk_dsu_freq_real = c->sb_ch;
 	return;
 #endif
 }
@@ -2580,10 +2590,17 @@ inline void mtk_map_util_freq_adap_grp(void *data, unsigned long util,
 	u64 wall_time_stamp;
 	struct rq *rq;
 	unsigned long rq_uclamp_min, rq_uclamp_max;
+	unsigned long max_util_curr = ULONG_MAX;
+	struct task_struct *curr_task;
+	int flg_curr_task = -1, flg_exit_state = -1, flg_pid = -1;
+	unsigned long max_util_curr_eff = ULONG_MAX;
+	unsigned long umax = 0;
+	int curr_task_uclamp = 0;
 
 	rq = cpu_rq(cpu);
 	rq_uclamp_min = READ_ONCE(rq->uclamp[UCLAMP_MIN].value);
 	rq_uclamp_max = READ_ONCE(rq->uclamp[UCLAMP_MAX].value);
+	curr_task_uclamp = get_curr_task_uclamp_ctrl();
 
 	if (data != NULL) {
 		sg_policy = (struct sugov_policy *)data;
@@ -2614,6 +2631,34 @@ inline void mtk_map_util_freq_adap_grp(void *data, unsigned long util,
 		util = (util * util_scale) >> SCHED_CAPACITY_SHIFT;
 	else
 		util = max_t(int, pelt_util_with_margin, flt_util);
+
+	if (curr_task_uclamp) {
+		rcu_read_lock();
+		curr_task = rcu_dereference(rq->curr);
+		if (curr_task) {
+			flg_curr_task = 1;
+			flg_pid = curr_task->pid;
+			if (!curr_task->exit_state) {
+				flg_exit_state = 0;
+				max_util_curr = curr_task->uclamp_req[UCLAMP_MAX].value;
+				max_util_curr_eff = curr_task->uclamp[UCLAMP_MAX].value;
+			} else {
+				flg_exit_state = 1;
+			}
+		} else {
+			flg_curr_task = 0;
+		}
+		rcu_read_unlock();
+
+		umax = min_t(unsigned long, max_util_curr, rq->uclamp[UCLAMP_MAX].value);
+		umax = (umax * util_scale) >> SCHED_CAPACITY_SHIFT;
+
+		util = min_t(unsigned long, util, umax);
+
+		if (trace_sugov_ext_curr_task_uclamp_enabled())
+			trace_sugov_ext_curr_task_uclamp(cpu, flg_pid, flg_curr_task, flg_exit_state,
+				max_util_curr, max_util_curr_eff, rq->uclamp[UCLAMP_MAX].value);
+	}
 
 	*next_freq = pd_get_util_freq(cpu, util);
 

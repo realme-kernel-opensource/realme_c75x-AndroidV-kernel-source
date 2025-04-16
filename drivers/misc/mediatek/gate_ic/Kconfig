@@ -13,4 +13,3 @@ config RT4831A_I2C
 	  Set y to support.
 	  Set n to disable.
 	  RT4831 I2C driver for display and backlight.
-

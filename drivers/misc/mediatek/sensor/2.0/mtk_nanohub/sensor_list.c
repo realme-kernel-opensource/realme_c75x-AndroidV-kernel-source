@@ -19,6 +19,9 @@ enum sensorlist {
 	baro,
 	sar,
 	ois,
+	front_cct,
+	pwm_rgb,
+	flicker,
 	maxhandle,
 };
 
@@ -50,6 +53,15 @@ int sensorlist_sensor_to_handle(int sensor)
 		break;
 	case SENSOR_TYPE_OIS:
 		handle = ois;
+		break;
+	case SENSOR_TYPE_FRONT_CCT:
+                handle = front_cct;
+                break;
+        case SENSOR_TYPE_PWM_RGB:
+                handle = pwm_rgb;
+                break;
+	case SENSOR_TYPE_FLICKER:
+		handle = flicker;
 		break;
 	}
 	return handle;
@@ -83,6 +95,15 @@ int sensorlist_handle_to_sensor(int handle)
 		break;
 	case ois:
 		type = SENSOR_TYPE_OIS;
+		break;
+	case front_cct:
+                type = SENSOR_TYPE_FRONT_CCT;
+                break;
+        case pwm_rgb:
+                type = SENSOR_TYPE_PWM_RGB;
+                break;
+	case flicker:
+		type = SENSOR_TYPE_FLICKER;
 		break;
 	}
 	return type;

@@ -85,6 +85,7 @@ module_param_array(debug_module_bw, int, NULL, 0644);
 	#define INIEN_ROI_TIMING_0 REG_FLD_MSB_LSB(15, 15)
 #define DISP_REG_OVL_INTSTA			(0x0008)
 #define DISP_REG_OVL_EN_CON			(0x000CUL)
+	#define OP_8_BIT_MODE			BIT(4)
 	#define EN_FLD_BLOCK_EXT_ULTRA			REG_FLD_MSB_LSB(18, 18)
 	#define EN_FLD_BLOCK_EXT_PREULTRA		REG_FLD_MSB_LSB(19, 19)
 #define DISP_REG_OVL_EN				(0x0020UL)
@@ -715,9 +716,10 @@ static void mtk_ovl_update_hrt_usage(struct mtk_drm_crtc *mtk_crtc,
 			struct mtk_ddp_comp *comp, struct mtk_plane_state *plane_state)
 {
 	struct mtk_disp_ovl_exdma *ovl = comp_to_ovl_exdma(comp);
+	struct drm_plane_state *state = &plane_state->base;
 	unsigned int lye_id = plane_state->comp_state.lye_id;
 	unsigned int ext_lye_id = plane_state->comp_state.ext_lye_id;
-	struct drm_framebuffer *fb = plane_state->base.fb;
+	struct drm_framebuffer *fb = state->fb;
 	unsigned int fmt = 0;
 	unsigned int phy_id = 0;
 
@@ -732,6 +734,14 @@ static void mtk_ovl_update_hrt_usage(struct mtk_drm_crtc *mtk_crtc,
 			mtk_crtc->usage_ovl_fmt[(phy_id + lye_id)] = mtk_get_format_bpp(fmt);
 			mtk_crtc->usage_ovl_compr[(phy_id + lye_id)] =
 					plane_state->prop_val[PLANE_PROP_COMPRESS];
+			mtk_crtc->usage_ovl_roi[(phy_id + lye_id)].x =
+					state->dst.x1;
+			mtk_crtc->usage_ovl_roi[(phy_id + lye_id)].y =
+					state->dst.y1;
+			mtk_crtc->usage_ovl_roi[(phy_id + lye_id)].width =
+					drm_rect_width(&state->dst);
+			mtk_crtc->usage_ovl_roi[(phy_id + lye_id)].height =
+					drm_rect_height(&state->dst);
 		}
 	}
 }
@@ -2452,6 +2462,13 @@ static void mtk_ovl_exdma_layer_config(struct mtk_ddp_comp *comp, unsigned int i
 		/* if format is DRM_FORMAT_Y410, enable Y2R inside OVL */
 	}
 
+	if (fmt == DRM_FORMAT_Y410)
+		cmdq_pkt_write(handle, comp->cmdq_base, comp->regs_pa + DISP_REG_OVL_EN_CON,
+			OP_8_BIT_MODE, OP_8_BIT_MODE);
+	else
+		cmdq_pkt_write(handle, comp->cmdq_base, comp->regs_pa + DISP_REG_OVL_EN_CON,
+			0x0, OP_8_BIT_MODE);
+
 	if (ext_lye_idx != LYE_NORMAL) {
 		unsigned int id = ext_lye_idx - 1;
 
@@ -2609,7 +2626,7 @@ static void mtk_ovl_exdma_layer_config(struct mtk_ddp_comp *comp, unsigned int i
 			vact = mode->vdisplay;
 			ratio_tmp = vtotal * 100 / vact;
 		} else
-			ratio_tmp = 125;
+			ratio_tmp = 100;
 
 		DDPDBG("%s, vrefresh=%d, ratio_tmp=%d\n",
 			__func__, vrefresh, ratio_tmp);
@@ -3781,6 +3798,7 @@ static int mtk_ovl_exdma_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 		u32 hdr_bw_val = 0;
 		u32 stash_bw_val = 0;
 		u32 hdr_stash_bw_val = 0;
+		u32 trans_size = 256;
 
 		if (!mtk_drm_helper_get_opt(priv->helper_opt,
 				MTK_DRM_OPT_MMQOS_SUPPORT))
@@ -3798,6 +3816,8 @@ static int mtk_ovl_exdma_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 		usage_ovl_compr = mtk_crtc->usage_ovl_compr[phy_id];
 
 		bw_val = (bw_val * usage_ovl_fmt) >> 2;
+		if ((priv->data->mmsys_id == MMSYS_MT6991) && (bw_val > 0))
+			bw_val += trans_size;
 
 		if (debug_module_bw[phy_id])
 			bw_val = debug_module_bw[phy_id];
@@ -3809,6 +3829,8 @@ static int mtk_ovl_exdma_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 				priv->data->respective_ostdl);
 			comp->last_hrt_bw = bw_val;
 		}
+		if ((priv->data->mmsys_id == MMSYS_MT6991) && (bw_val > 0))
+			bw_val -= trans_size;
 
 		if (!IS_ERR(comp->hdr_qos_req)) {
 			if (bw_val && usage_ovl_compr)
@@ -3872,6 +3894,7 @@ static int mtk_ovl_exdma_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 		u32 hdr_bw_val = 0;
 		u32 stash_bw_val = 0;
 		u32 hdr_stash_bw_val = 0;
+		u32 trans_size = 256;
 
 		if (!mtk_drm_helper_get_opt(priv->helper_opt,
 				MTK_DRM_OPT_MMQOS_SUPPORT))
@@ -3894,6 +3917,8 @@ static int mtk_ovl_exdma_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 		usage_ovl_compr = mtk_crtc->usage_ovl_compr[phy_id];
 
 		bw_val = (bw_val * usage_ovl_fmt) >> 2;
+		if ((priv->data->mmsys_id == MMSYS_MT6991) && (bw_val > 0))
+			bw_val += trans_size;
 
 		if (debug_module_bw[phy_id])
 			bw_val = debug_module_bw[phy_id];
@@ -3914,6 +3939,8 @@ static int mtk_ovl_exdma_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 				bw_val, ~0);
 		}
 		comp->last_hrt_bw = bw_val;
+		if ((priv->data->mmsys_id == MMSYS_MT6991) && (bw_val > 0))
+			bw_val -= trans_size;
 
 		if (!IS_ERR(comp->hdr_qos_req)) {
 			if (bw_val && usage_ovl_compr)
@@ -3921,7 +3948,7 @@ static int mtk_ovl_exdma_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 
 			if (hdr_bw_val > comp->last_hdr_bw) {
 				DDPDBG("%s hdr_bw fast up %u -> %u\n",
-					mtk_dump_comp_str_id(comp->id), comp->last_hdr_bw, hdr_bw_val);
+					mtk_dump_comp_str_id(comp->id),	comp->last_hdr_bw, hdr_bw_val);
 				__mtk_disp_set_module_hrt(comp->hdr_qos_req, comp->id, hdr_bw_val,
 					priv->data->respective_ostdl);
 				cmdq_pkt_write(handle, mtk_crtc->gce_obj.base,
@@ -3929,7 +3956,7 @@ static int mtk_ovl_exdma_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 					NO_PENDING_HRT, ~0);
 			} else if (hdr_bw_val < comp->last_hdr_bw) {
 				DDPDBG("%s hdr_bw_val will slow down %u -> %u\n",
-					mtk_dump_comp_str_id(comp->id), comp->last_hdr_bw, hdr_bw_val);
+					mtk_dump_comp_str_id(comp->id),	comp->last_hdr_bw, hdr_bw_val);
 				cmdq_pkt_write(handle, mtk_crtc->gce_obj.base,
 				mtk_get_gce_backup_slot_pa(mtk_crtc, DISP_SLOT_CUR_HDR_BW_VAL(phy_id)),
 					hdr_bw_val, ~0);
@@ -4033,11 +4060,11 @@ static int mtk_ovl_exdma_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *hand
 				DISP_SLOT_CUR_HDR_BW_VAL(phy_id));
 			if (hdr_bw_val != NO_PENDING_HRT && hdr_bw_val <= comp->last_hdr_bw) {
 				DDPINFO("%s hdr_bw_val slow down to %u\n",
-					mtk_dump_comp_str_id(comp->id), comp->last_hdr_bw);
+						mtk_dump_comp_str_id(comp->id), comp->last_hdr_bw);
 				__mtk_disp_set_module_hrt(comp->hdr_qos_req, comp->id, comp->last_hdr_bw,
 					priv->data->respective_ostdl);
 				*(unsigned int *)mtk_get_gce_backup_slot_va(mtk_crtc,
-					DISP_SLOT_CUR_HDR_BW_VAL(phy_id)) = NO_PENDING_HRT;
+					DISP_SLOT_CUR_HDR_BW_VAL(phy_id)) =	NO_PENDING_HRT;
 			}
 		}
 

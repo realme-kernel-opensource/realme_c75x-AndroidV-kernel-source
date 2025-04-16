@@ -330,6 +330,7 @@ int mtk_dprec_logger_pr(unsigned int type, char *fmt, ...);
 		DDPINFO("M_ULOCK_NST[%d]:%s[%d] -\n", i, name, line);	\
 	} while (0)
 
+/* #ifdef OPLUS_FEATURE_DISPLAY */
 #if IS_ENABLED(CONFIG_MTK_AEE_FEATURE)
 #define DDPAEE(string, args...)							\
 	do {									\
@@ -339,7 +340,7 @@ int mtk_dprec_logger_pr(unsigned int type, char *fmt, ...);
 		if (r < 0) {	\
 			pr_err("snprintf error\n");	\
 		}	\
-		aee_kernel_warning_api(__FILE__, __LINE__,			\
+		aee_kernel_exception_api(__FILE__, __LINE__,			\
 					DB_OPT_DEFAULT | DB_OPT_FTRACE |	\
 					DB_OPT_MMPROFILE_BUFFER,		\
 				       str, string, ##args);			\
@@ -354,12 +355,13 @@ int mtk_dprec_logger_pr(unsigned int type, char *fmt, ...);
 		if (r < 0) {	\
 			pr_err("snprintf error\n");				\
 		}	\
-		aee_kernel_fatal_api(__FILE__, __LINE__,			\
+		aee_kernel_exception_api(__FILE__, __LINE__,			\
 					DB_OPT_DEFAULT | DB_OPT_FTRACE |	\
 					DB_OPT_MMPROFILE_BUFFER,		\
 					str, string, ##args);			\
 		DDPPR_ERR("[DDP Fatal Error]" string, ##args);			\
 	} while (0)
+/*# endif */ /* OPLUS_FEATURE_DISPLAY */
 #else /* !CONFIG_MTK_AEE_FEATURE */
 #define DDPAEE(string, args...)                                                \
 	do {                                                                   \

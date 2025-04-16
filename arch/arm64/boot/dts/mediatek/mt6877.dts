@@ -37,8 +37,9 @@
 			vmalloc=400M swiotlb=noforce \
 			transparent_hugepage=never \
 			initcall_debug=1 pelt=8 \
-			8250.nr_uarts=2 \
+			8250.nr_uarts=2 restrict_cma_redirect \
 			firmware_class.path=/vendor/firmware \
+			log_buf_len=4m \
 			loop.max_part=7";
 			kaslr-seed = <0 0>;
 	};
@@ -679,6 +680,18 @@
 	};
 
 	aliases {
+		i2c0 = &i2c0;
+		i2c1 = &i2c1;
+		i2c2 = &i2c2;
+		i2c3 = &i2c3;
+		i2c4 = &i2c4;
+		i2c5 = &i2c5;
+		i2c6 = &i2c6;
+		i2c7 = &i2c7;
+		i2c8 = &i2c8;
+		i2c9 = &i2c9;
+		i2c10 = &i2c10;
+		i2c11 = &i2c11;
 		ovl0  = &disp_ovl0;
 		ovl3  = &disp_ovl0_2l;
 		ovl4  = &disp_ovl1_2l;
@@ -924,7 +937,7 @@
 		interrupts = <GIC_SPI 245 IRQ_TYPE_LEVEL_HIGH 0>;
 	};
 
-	soc {
+	soc: soc {
 		#address-cells = <2>;
 		#size-cells = <2>;
 		compatible = "simple-bus";
@@ -1392,6 +1405,20 @@
 			trusted-mem-type = <1>;
 			region-heap-align-name = "mtk_prot_region-aligned";
 			iommus = <&iommu0 M4U_PORT_L0_DISP_POSTMASK0>;
+		};
+
+		mtkheap_page_svp: mtkheap-page-svp {
+			compatible = "mediatek,dmaheap-mtk-sec-page";
+			heap-name = "mtk_svp_page-uncached";
+			trusted-mem-type = <9>;
+			status = "disabled";
+		};
+
+		mtkheap_page_wfd: mtkheap-page-wfd {
+			compatible = "mediatek,dmaheap-mtk-sec-page";
+			heap-name = "mtk_wfd_page-uncached";
+			trusted-mem-type = <11>;
+			status = "disabled";
 		};
 
 		mtkheap_region_svp: mtkheap-region-svp {
@@ -3173,6 +3200,12 @@
 			mode-ddr-reserve = <BOOT_DDR_RSVD>;
 			mode-meta = <BOOT_META>;
 			mode-rpmbpk = <BOOT_RPMBPK>;
+			mode-kernel = <BOOT_KERNEL>;
+			mode-sau = <BOOT_SAU>;
+			mode-silence = <BOOT_SILENCE>;
+			mode-sblmemtest = <BOOT_AGINGTEST>;
+			mode-ftm = <BOOT_FACTORY>;
+			mode-edl = <BOOT_EDL>;
 		};
 	};
 
@@ -4001,15 +4034,26 @@
 		compatible = "mediatek,goodix-fp";
 	};
 
+	//#ifdef OPLUS_FEATURE_SECURITY_COMMON
+	oplus_secure_common:oplus_secure_common {
+		compatible = "oplus,secure_common";
+		oplus,sec_reg_num = <0>;
+		oplus,sec_en_anti_reg = <0>;
+		oplus,sec_override1_reg = <0>;
+		oplus,override1_en_value = <0>;
+	};
+	//#endif  /* OPLUS_FEATURE_SECURITY_COMMON */
+
+        /*
 	touch_panel0: touch_panel@0 {
 		compatible = "mediatek,legacy-lcm-workaround";
 	};
-
+        */
 	regulator_vibrator: regulator-vibrator {
 		compatible = "regulator-vibrator";
 		label = "vibrator";
-		min-volt = <2300000>;
-		max-volt = <3200000>;
+		min-volt = <2800000>;
+		max-volt = <3500000>;
 		min-limit = <15>;
 		max-limit = <15000>;
 		vib-supply = <&mt6359p_vibr_reg>;
@@ -4517,6 +4561,7 @@
 			 <&infracfg_ao_clk CLK_IFRAO_GCE_26M>;
 		clock-names = "gce", "gce-timer";
 		cpr-not-support-cookie;
+		skip-poll-sleep;
 	};
 
 	gce_mbox_sec: gce_mbox_sec@10228000 {
@@ -4533,8 +4578,8 @@
 		mediatek,gce = <&gce_mbox>;
 		mmsys_config = <&mmsys_config_clk>;
 		mediatek,gce-subsys = <99>, <SUBSYS_1400XXXX>;
-		mboxes = <&gce_mbox 23 0 CMDQ_THR_PRIO_1>,
-			 <&gce_mbox 22 CMDQ_NO_TIMEOUT CMDQ_THR_PRIO_1>;
+		//mboxes = <&gce_mbox 23 0 CMDQ_THR_PRIO_1>,
+			 //<&gce_mbox 22 CMDQ_NO_TIMEOUT CMDQ_THR_PRIO_1>;
 			 // <&gce_mbox_sec 11 0 CMDQ_THR_PRIO_1>;
 		token_user0 = /bits/ 16 <CMDQ_SYNC_TOKEN_USER_0>;
 		token_gpr_set4 = /bits/ 16 <CMDQ_SYNC_TOKEN_GPR_SET_4>;
@@ -5335,7 +5380,7 @@
 		compatible = "mediatek,mt6877-adsp_core_0";
 		reg = <0 0x10840000 0 0x9000>, /* ITCM */
 			<0 0x10820000 0 0x8000>; /* DTCM */
-		system = <0 0x56000000 0 0xA00000>;
+		system = <0 0x56000000 0 0xC00000>;
 		interrupts = <GIC_SPI 532 IRQ_TYPE_LEVEL_HIGH 0>, /* ADSP_CIRQ_C0_IRQ_BIT */
 			<GIC_SPI 534 IRQ_TYPE_LEVEL_HIGH 0>, /* ADSP_WDT0_IRQ_BIT */
 			<GIC_SPI 536 IRQ_TYPE_LEVEL_HIGH 0>; /* ADSP2AFE_CIRQ_C0_IRQ_BIT */
@@ -5612,6 +5657,7 @@
 			"disp_wdma0_eof0",
 			"disp_token_stream_block0",
 			"disp_token_cabc_eof0",
+			"disp_token_vdo_cabc_eof0",
 			"disp_wdma0_eof2",
 			"disp_dsi0_sof0";
 
@@ -5626,6 +5672,7 @@
 			<&gce_mbox CMDQ_EVENT_DISP_WDMA0_FRAME_DONE>,
 			<&gce_mbox CMDQ_SYNC_TOKEN_STREAM_BLOCK>,
 			<&gce_mbox CMDQ_SYNC_TOKEN_CABC_EOF>,
+			<&gce_mbox CMDQ_SYNC_TOKEN_VDO_MODE_CABC_EOF>,
 			<&gce_mbox CMDQ_EVENT_DISP_WDMA0_FRAME_DONE>,
 			<&gce_mbox CMDQ_EVENT_DSI0_SOF>;
 
@@ -7379,7 +7426,7 @@
 		2d_fr-size = <0 0>;
 		tui-size = <0 0x4000000>;
 		wfd-region-based-size = <0 0x4000000>;
-		prot-region-based-size = <0 0x8000000>;
+		prot-region-based-size = <0 0x0000000>;
 		ta-elf-size = <0 0x1000000>;
 		ta-stack-heap-size = <0 0x6000000>;
 		sdsp-tee-sharedmem-size = <0 0x1000000>;
@@ -7852,7 +7899,7 @@
 		clock-names = "parent-clk", "sel-clk", "spi-clk";
 	};
 
-	i2c0: i2c0@11e00000 {
+	i2c0: i2c@11e00000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11e00000 0 0x1000>,
 			<0 0x10220200 0 0x80>;
@@ -7864,7 +7911,7 @@
 		mediatek,control-rs-stop;
 	};
 
-	i2c1: i2c1@11d20000 {
+	i2c1: i2c@11d20000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11d20000 0 0x1000>,
 			<0 0x10220380 0 0x80>;
@@ -7876,7 +7923,7 @@
 		mediatek,control-rs-stop;
 	};
 
-	i2c2: i2c2@11d21000 {
+	i2c2: i2c@11d21000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11d21000 0 0x1000>,
 			<0 0x10220400 0 0x180>;
@@ -7886,9 +7933,10 @@
 		clock-names = "main", "dma";
 		clock-div = <1>;
 		mediatek,control-rs-stop;
+		mediatek,dynamic-speed;
 	};
 
-	i2c3: i2c3@11cb0000 {
+	i2c3: i2c@11cb0000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11cb0000 0 0x1000>,
 			<0 0x10220580 0 0x80>;
@@ -7900,7 +7948,7 @@
 		mediatek,control-rs-stop;
 	};
 
-	i2c4: i2c4@11d22000 {
+	i2c4: i2c@11d22000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11d22000 0 0x1000>,
 			<0 0x10220600 0 0x180>;
@@ -7910,9 +7958,10 @@
 		clock-names = "main", "dma";
 		clock-div = <1>;
 		mediatek,control-rs-stop;
+		mediatek,dynamic-speed;
 	};
 
-	i2c5: i2c5@11d00000 {
+	i2c5: i2c@11d00000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11d00000 0 0x1000>,
 			<0 0x10220780 0 0x80>;
@@ -7924,7 +7973,7 @@
 		mediatek,control-rs-stop;
 	};
 
-	i2c6: i2c6@11f00000 {
+	i2c6: i2c@11f00000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11f00000 0 0x1000>,
 			<0 0x10220800 0 0x80>;
@@ -7936,7 +7985,7 @@
 		mediatek,control-rs-stop;
 	};
 
-	i2c7: i2c7@11d01000 {
+	i2c7: i2c@11d01000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11d01000 0 0x1000>,
 			<0 0x10220880 0 0x180>;
@@ -7948,7 +7997,7 @@
 		mediatek,control-rs-stop;
 	};
 
-	i2c8: i2c8@11d02000 {
+	i2c8: i2c@11d02000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11d02000 0 0x1000>,
 			<0 0x10220a00 0 0x180>;
@@ -7960,7 +8009,7 @@
 		mediatek,control-rs-stop;
 	};
 
-	i2c9: i2c9@11d03000 {
+	i2c9: i2c@11d03000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11d03000 0 0x1000>,
 			<0 0x10220b80 0 0x180>;
@@ -7972,7 +8021,7 @@
 		mediatek,control-rs-stop;
 	};
 
-	i2c10: i2c10@11280000 {
+	i2c10: i2c@11280000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11280000 0 0x1000>,
 			<0 0x10220d00 0 0x80>;
@@ -7984,7 +8033,7 @@
 		mediatek,control-rs-stop;
 	};
 
-	i2c11: i2c11@11281000 {
+	i2c11: i2c@11281000 {
 		compatible = "mediatek,mt6877-i2c";
 		reg = <0 0x11281000 0 0x1000>,
 			<0 0x10220d80 0 0x80>;
@@ -8094,6 +8143,9 @@
 		vbus-current = <1800000>;
 		tcpc = "type_c_port0";
 		mediatek,bypss-typec-sink = <1>;
+//#ifdef OPLUS_FEATURE_CHG_BASIC
+		oplus,vbus_set = <1>;
+//#endif
 		port {
 			usb_role: endpoint@0 {
 				remote-endpoint = <&mtu3_drd_switch>;
@@ -8423,6 +8475,18 @@
 		mediatek,platform = <&afe>;
 		mediatek,headset-codec = <&accdet>;
 	};
+	//oplus extend audio
+	audio_extend: audio_extend {
+		compatible = "oplus,asoc-audio";
+	};
+//#ifdef OPLUS_ARCH_EXTENDS
+// Add for sipa
+	si_pa_L: si_pa_L{
+	};
+
+	si_pa_R: si_pa_R{
+	};
+//#endif
 
 	/* feature : $enable $dl_mem $ul_mem $ref_mem $size */
 	snd_audio_dsp: snd-audio-dsp {
@@ -8581,6 +8645,7 @@
 
 		mt6315_6_regulator: mt6315_6_regulator {
 			compatible = "mediatek,mt6315_6-regulator";
+			buck-size = <4>;
 			interrupt-parent = <&pio>;
 			interrupts = <109 IRQ_TYPE_LEVEL_HIGH 109 0>;
 			interrupt-controller;
@@ -8608,7 +8673,6 @@
 				regulator-min-microvolt = <300000>;
 				regulator-max-microvolt = <1193750>;
 				regulator-enable-ramp-delay = <256>;
-				regulator-always-on;
 			};
 		};
 	};
@@ -8643,7 +8707,6 @@
 				regulator-min-microvolt = <300000>;
 				regulator-max-microvolt = <1193750>;
 				regulator-enable-ramp-delay = <256>;
-				regulator-always-on;
 			};
 			mt6315_3_vbuck4: 3-vbuck4 {
 				regulator-compatible = "vbuck4";
@@ -8989,7 +9052,7 @@
 			batoc-notify = <0>;
 			phys = <&u2port0 PHY_TYPE_USB2>;
 			phy-names = "usb2-phy";
-			bc12-ref = <&mtk_ctd>;
+			bc12_ref = <&mtk_ctd>;
 			otg_vbus: usb-otg-vbus {
 				regulator-compatible = "usb-otg-vbus";
 				regulator-name = "usb-otg-vbus";
@@ -9279,6 +9342,35 @@
 #include "mediatek/mt6877-disable-unused.dtsi"
 #include "mediatek/trusty.dtsi"
 #include "mediatek/cust_mt6877_connfem.dtsi"
+#include "mediatek/cust_mt6877_thermal.dtsi"
+
+
+//#ifdef OPLUS_FEATURE_SECURITY_COMMON
+&mtkheap_page_svp {
+	status = "ok";
+};
+
+&mtkheap_page_wfd {
+	status = "ok";
+};
+
+&mtkheap_region_svp {
+	status = "ok";
+};
+
+&mtkheap_region_wfd {
+	status = "ok";
+};
+
+&mtee_svp {
+	mtee: MTEE {
+		compatible = "mediatek,mtk_svp_on_mtee_support";
+	};
+	svp: SecureVideoPath {
+		compatible = "mediatek,mtk_sec_video_path_support";
+	};
+};
+//#endif /* OPLUS_FEATURE_SECURITY_COMMON */
 
 &hypervisor {
 	status = "okay";
@@ -9336,4 +9428,4 @@
 	md-vdigrf = <700000 700000>;
 };
 
-/delete-node/ &mt6315_6_vbuck4;
+

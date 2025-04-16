@@ -362,8 +362,10 @@ static int mt6315_regulator_probe(struct platform_device *pdev)
 
 	pdata = (struct mt6315_init_data *)of_id->data;
 	chip->slave_id = pdata->id;
-	if (!of_property_read_u32(node, "buck-size", &val))
+	if (!of_property_read_u32(node, "buck-size", &val)){
+		printk(KERN_ERR "buck-size = %d ", val);
 		pdata->size = val;
+	}
 	if (!of_property_read_u32(node, "buck1-modeset-mask", &val))
 		pdata->buck1_modeset_mask = val;
 	if (!of_property_read_u32(node, "buck3-modeset-mask", &val))

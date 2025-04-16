@@ -28,7 +28,13 @@
 #include "kd_seninf.h"
 
 #include "seninf_common.h"
-#include "seninf_clk.h"
+
+#if defined(MTK_PLATFORM_MT6833)
+#include "../../mt6853/seninf_mt6833/seninf_clk.h"
+#else
+#include "../../mt6853/seninf_mt6877/seninf_clk.h"
+#endif
+
 #include "seninf.h"
 #include "kd_imgsensor_errcode.h"
 #include "imgsensor_ca.h"
@@ -726,7 +732,6 @@ static inline MINT32 seninf_reg_of_dev(struct SENINF *pseninf)
 	char pdev_name[64];
 	struct device_node *node = NULL;
 	unsigned int seninf_max_num = 0;
-
 	/* Map seninf */
 	seninf_max_num = pseninf->g_seninf_max_num_id;
 	for (i = 0; i < seninf_max_num; i++) {

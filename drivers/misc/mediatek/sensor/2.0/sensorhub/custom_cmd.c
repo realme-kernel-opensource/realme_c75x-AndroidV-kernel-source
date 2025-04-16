@@ -231,7 +231,8 @@ int custom_cmd_comm_with(int sensor_type, struct custom_cmd *cust_cmd)
 	if (sap_enabled() && (sensor_type == SENSOR_TYPE_OIS
 		|| sensor_type == SENSOR_TYPE_OIS1
 		|| sensor_type == SENSOR_TYPE_OIS2
-		|| sensor_type == SENSOR_TYPE_OIS3))
+		|| sensor_type == SENSOR_TYPE_OIS3
+		|| sensor_type == SENSOR_TYPE_OIS_IMU))
 		return sap_custom_cmd_comm(sensor_type, cust_cmd);
 #endif
 

@@ -1,10 +1,16 @@
 # SPDX-License-Identifier: GPL-2.0
 subdir-ccflags-$(CONFIG_POWER_SUPPLY_DEBUG) := -DDEBUG
 subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/usb/usb20/
+
+ifeq ($(CONFIG_OPLUS_PD_EXT_SUPPORT),)
 subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/typec/tcpc/inc
+else
+subdir-ccflags-y += -I$(srctree)/drivers/power/oplus/pd_ext/inc
+endif
 subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/power_throttling
 subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include
 subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/power/supply/ufcs
+subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/power/supply/
 
 ifeq ($(CONFIG_CHARGER_SGM41516D),m)
 obj-$(CONFIG_CHARGER_SGM41516D) += mtk_charger_framework.o charger_class.o adapter_class.o mtk_charger_algorithm_class.o mtk_ufcs_adapter.o sgm41516d.o mtk_chg_det.o
@@ -13,9 +19,15 @@ obj-$(CONFIG_CHARGER_BQ25601) += mtk_charger_framework.o charger_class.o adapter
 else ifeq ($(CONFIG_CHARGER_BQ25601),y)
 obj-$(CONFIG_CHARGER_BQ25601) += mtk_charger_framework.o charger_class.o adapter_class.o mtk_charger_algorithm_class.o mtk_ufcs_adapter.o
 else
-obj-$(CONFIG_MTK_CHARGER) += mtk_charger_framework.o mtk_pd_charging.o charger_class.o adapter_class.o mtk_charger_algorithm_class.o mtk_pd_adapter.o mtk_ufcs_adapter.o
+#ifndef OPLUS_FEATURE_CHG_BASIC
+#obj-$(CONFIG_MTK_CHARGER) += mtk_charger_framework.o mtk_pd_charging.o charger_class.o adapter_class.o mtk_charger_algorithm_class.o mtk_pd_adapter.o mtk_ufcs_adapter.o
+#endif
+#mtk_charger_framework-objs := mtk_charger.o mtk_charger_intf.o mtk_basic_charger.o mtk_pulse_charger.o mtk_adapter_switch.o
+#else
+obj-$(CONFIG_MTK_CHARGER) += mtk_pd_charging.o charger_class.o adapter_class.o mtk_charger_algorithm_class.o mtk_pd_adapter.o
+#endif
 endif
-mtk_charger_framework-objs := mtk_charger.o mtk_charger_intf.o mtk_basic_charger.o mtk_pulse_charger.o mtk_adapter_switch.o
+
 
 mtk_pd_charging-objs := mtk_pd.o mtk_pd_hal.o
 obj-$(CONFIG_CHARGER_RT9465)	+= rt9465.o

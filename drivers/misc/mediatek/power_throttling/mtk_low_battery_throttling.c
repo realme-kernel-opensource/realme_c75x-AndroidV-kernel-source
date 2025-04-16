@@ -15,7 +15,9 @@
 #include "mtk_low_battery_throttling.h"
 #include "pmic_lbat_service.h"
 #include "pmic_lvsys_notify.h"
-
+//#ifdef OPLUS_BUG_STABILITY
+#include <soc/oplus/boot/boot_mode.h>
+//#endif
 #define CREATE_TRACE_POINTS
 #include "mtk_low_battery_throttling_trace.h"
 #include "../mbraink/mbraink_ioctl_struct_def.h"
@@ -67,6 +69,7 @@ struct lbat_thl_priv {
 	struct timer_list notify_timer;
 	struct task_struct *notify_thread;
 	struct device *dev;
+	unsigned int user_enable;
 	unsigned int bat_type;
 	int lbat_thl_stop;
 	int lbat_thd_modify;
@@ -349,9 +352,11 @@ static int __used decide_and_throttle(enum LOW_BATTERY_USER_TAG user, unsigned i
 
 		lbat_data->l_lbat_lv = MAX(lbat_data->lbat_lv[INTR_1], lbat_data->lbat_lv[INTR_2]);
 
-		if (lbat_data->lbat_thl_stop > 0 || lbat_data->ppb_mode == 1) {
-			pr_info("[%s] user=%d input=%d not apply, stop/ppb=%d/%d\n", __func__,
-				user, input, lbat_data->lbat_thl_stop, lbat_data->ppb_mode);
+		if (lbat_data->lbat_thl_stop > 0 || lbat_data->ppb_mode == 1
+			|| lbat_data->user_enable == 0) {
+			pr_info("[%s] user=%d input=%d not apply, stop/ppb/user_enable=%d/%d/%d\n", __func__,
+				user, input, lbat_data->lbat_thl_stop, lbat_data->ppb_mode,
+				lbat_data->user_enable);
 		} else {
 			lbat_thl_lv = convert_to_thl_lv(LBAT_INTR_1, lbat_data->temp_cur_stage, lbat_data->l_lbat_lv);
 			lvsys_thl_lv = convert_to_thl_lv(LVSYS_INTR, lbat_data->temp_cur_stage, lbat_data->lvsys_lv);
@@ -362,9 +367,10 @@ static int __used decide_and_throttle(enum LOW_BATTERY_USER_TAG user, unsigned i
 		mutex_unlock(&exe_thr_lock);
 	} else if (user == LVSYS_INTR) {
 		lbat_data->lvsys_lv = input;
-		if (lbat_data->lbat_thl_stop > 0 || lbat_data->ppb_mode == 1) {
-			pr_info("[%s] user=%d input=%d not apply, stop=%d, ppb_mode=%d\n", __func__,
-				user, input, lbat_data->lbat_thl_stop, lbat_data->ppb_mode);
+		if (lbat_data->lbat_thl_stop > 0 || lbat_data->ppb_mode == 1
+			|| lbat_data->user_enable == 0) {
+			pr_info("[%s] user=%d input=%d not apply, stop=%d, ppb_mode=%d, user_enable=%d\n", __func__,
+				user, input, lbat_data->lbat_thl_stop, lbat_data->ppb_mode, lbat_data->user_enable);
 		} else {
 			lbat_thl_lv = convert_to_thl_lv(LBAT_INTR_1, lbat_data->temp_cur_stage, lbat_data->l_lbat_lv);
 			lvsys_thl_lv = convert_to_thl_lv(LVSYS_INTR, lbat_data->temp_cur_stage, lbat_data->lvsys_lv);
@@ -375,9 +381,9 @@ static int __used decide_and_throttle(enum LOW_BATTERY_USER_TAG user, unsigned i
 		mutex_unlock(&exe_thr_lock);
 	} else if (user == PPB) {
 		lbat_data->ppb_mode = input;
-		if (lbat_data->lbat_thl_stop > 0) {
-			pr_info("[%s] user=%d input=%d not apply, stop=%d\n", __func__, user, input,
-				lbat_data->lbat_thl_stop);
+		if (lbat_data->lbat_thl_stop > 0 || lbat_data->user_enable == 0) {
+			pr_info("[%s] user=%d input=%d not apply, stop=%d, user_enable=%d\n", __func__, user, input,
+				lbat_data->lbat_thl_stop, lbat_data->user_enable);
 			mutex_unlock(&exe_thr_lock);
 		} else if (lbat_data->ppb_mode == 1) {
 			exec_throttle(LOW_BATTERY_LEVEL_0, user, thd_volt, input);
@@ -430,6 +436,23 @@ static int __used decide_and_throttle(enum LOW_BATTERY_USER_TAG user, unsigned i
 		lbat_data->lbat_thl_stop = 1;
 		exec_throttle(input, user, thd_volt, input);
 		mutex_unlock(&exe_thr_lock);
+	} else if (user == USER_ENABLE) {
+		if (lbat_data->lbat_thl_stop > 0) {
+			pr_info("[%s] user=%d input=%d not apply, stop=%d\n", __func__, user, input,
+				lbat_data->lbat_thl_stop);
+			mutex_unlock(&exe_thr_lock);
+		} else if (input == 0) {
+			// PT keep running, but skip throttle
+			lbat_data->user_enable = input;
+			exec_throttle(LOW_BATTERY_LEVEL_0, user, thd_volt, input);
+			mutex_unlock(&exe_thr_lock);
+		} else if (input == 1) {
+			lbat_data->user_enable = input;
+			lbat_thl_lv = convert_to_thl_lv(LBAT_INTR_1, lbat_data->temp_cur_stage, lbat_data->l_lbat_lv);
+			lvsys_thl_lv = convert_to_thl_lv(LVSYS_INTR, lbat_data->temp_cur_stage, lbat_data->lvsys_lv);
+			exec_throttle(MAX(lbat_thl_lv, lvsys_thl_lv), user, thd_volt, input);
+			mutex_unlock(&exe_thr_lock);
+		}
 	} else {
 		mutex_unlock(&exe_thr_lock);
 	}
@@ -519,6 +542,18 @@ int lbat_set_hpt_mode(unsigned int enable)
 	return 0;
 }
 EXPORT_SYMBOL(lbat_set_hpt_mode);
+
+/* function: lbat_set_user_enable(enable)
+ * description: for user to set PT enable/disable
+ *              if enable = 0, PT function will disable and will not throttle anymore by low voltage
+ *              if enable = 1, PT function will enable and throttle by low voltage interrupt
+ */
+int lbat_set_user_enable(unsigned int enable)
+{
+	decide_and_throttle(USER_ENABLE, enable, 0);
+	return 0;
+}
+EXPORT_SYMBOL(lbat_set_user_enable);
 
 /*****************************************************************************
  * low battery throttle cnt
@@ -784,8 +819,12 @@ static int __used pt_check_power_off(void)
 		pt_power_off_cnt = 0;
 
 	if (pt_power_off_cnt >= 4) {
-		pr_info("Powering off by PT.\n");
-		kernel_power_off();
+		//#ifdef OPLUS_BUG_STABILITY
+		if (get_boot_mode() != META_BOOT && get_boot_mode() != FACTORY_BOOT) {
+			pr_info("Powering off by PT.\n");
+			kernel_power_off();
+		}
+		//#endif
 	}
 
 	return ret;
@@ -1429,6 +1468,7 @@ static int low_battery_throttling_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	priv->user_enable = 1;
 	priv->dev = &pdev->dev;
 	lbat_data = priv;
 	if (priv->pt_shutdown_en)

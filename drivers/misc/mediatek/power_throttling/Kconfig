@@ -105,3 +105,11 @@ config MTK_GPU_POWER_THROTTLING
 	  feature
 	  Select "n" if unsure.
 
+config MTK_EXT_POWER_THROTTLING
+	tristate "MTK EXT power throttling"
+	help
+	  For MediaTek EXT power throttling.
+	  Throttle MTK EXT power when MTK power throttling triggers
+	  Select "y" if you want to enable MTK EXT power throttling
+	  feature
+	  Select "n" if unsure.

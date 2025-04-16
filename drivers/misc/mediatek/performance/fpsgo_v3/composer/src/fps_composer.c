@@ -34,6 +34,10 @@
 #include "fbt_cpu_platform.h"
 #include "fpsgo_frame_info.h"
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GAME_ENABLE) && IS_ENABLED(CONFIG_OPLUS_FEATURE_CPU_GAME)
+#include <../kernel/oplus_cpu/oplus_game/early_detect.h>
+#endif
+
 #define MAX_FPSGO_CB_NUM 5
 
 static struct kobject *comp_kobj;
@@ -882,6 +886,10 @@ void fpsgo_ctrl2comp_enqueue_end(int pid,
 	unsigned long long enq_running_time = 0;
 	unsigned long long pprev_enqueue_end = 0, prev_enqueue_end = 0;
 	struct render_info *f_render = NULL;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GAME_ENABLE) && IS_ENABLED(CONFIG_OPLUS_FEATURE_CPU_GAME)
+	early_detect_set_render_task(pid);
+#endif
 
 	fpsgo_render_tree_lock(__func__);
 

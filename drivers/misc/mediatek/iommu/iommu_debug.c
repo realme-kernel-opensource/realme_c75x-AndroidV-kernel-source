@@ -884,7 +884,7 @@ char *mtk_iommu_get_port_name(enum mtk_iommu_type type, int id, int tf_id)
 	u32 port_nr;
 	int idx;
 
-	if (type < MM_IOMMU || type >= TYPE_NUM) {
+	if (type >= TYPE_NUM) {
 		pr_notice("%s fail, invalid type %d\n", __func__, type);
 		return "m4u_port_unknown";
 	}

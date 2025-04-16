@@ -217,4 +217,10 @@ int mtk_drm_dummy_cmd_on_ioctl(struct drm_device *dev, void *data,
 		struct drm_file *file_priv);
 unsigned long long mtk_get_cur_backlight(struct drm_crtc *crtc);
 
+#ifdef OPLUS_FEATURE_DISPLAY
+dcs_write_gce_pack oplus_dsi_display_get_dcs_pack_gce(void);
+dcs_write_gce oplus_dsi_display_get_dcs_write_gce(void);
+dcs_write_gce oplus_dsi_display_get_dcs_write_gce2(void);
+#endif
+
 #endif

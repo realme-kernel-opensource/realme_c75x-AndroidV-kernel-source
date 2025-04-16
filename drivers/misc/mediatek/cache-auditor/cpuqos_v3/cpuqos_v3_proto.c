@@ -56,6 +56,13 @@ static void __iomem *l3ctl_sram_base_addr;
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jing-Ting Wu");
 
+/* #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BENCHOPT) */
+#include <linux/seq_file.h>
+#include <linux/sched/signal.h>
+static int (*group_set_cgroup_colocate)(int, int);
+static int (*group_get_cgroup_colocate)(int);
+/* #endif CONFIG_OPLUS_FEATURE_BENCHOPT */
+
 static int cpuqos_subsys_id = cpu_cgrp_id;
 static struct device_node *node;
 static int plat_enable;
@@ -139,6 +146,30 @@ enum {
 
 
 static enum perf_mode cpuqos_perf_mode = DISABLE;
+
+/* #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BENCHOPT) */
+enum {
+	USER_GROUP1 = USER_GROUP_START_IDX + 1,
+	USER_GROUP2,
+	USER_GROUP3,
+	USER_GROUP4,
+	USER_GROUP5,
+	USER_GROUP6,
+};
+enum {
+	RESET_POLICY,
+	TARGET_POLICY,
+	MAX_POLICY,
+};
+static unsigned int init_pd = PD3;
+static unsigned int init_rank = GROUP_RANK;
+static unsigned int target_pd, target_rank;
+static pid_t mpam_target;
+static char mpam_sub_target[TASK_COMM_LEN];
+static int sub_target_len;
+static unsigned int policy = RESET_POLICY;
+static unsigned int debug;
+/* #endif CONFIG_OPLUS_FEATURE_BENCHOPT */
 
 int task_curr_clone(const struct task_struct *p)
 {
@@ -772,7 +803,33 @@ static void cpuqos_v3_task_newtask(void __always_unused *data,
 
 	WRITE_ONCE(cqts->pd, PD3); /* pd */
 	WRITE_ONCE(cqts->rank, GROUP_RANK); /* rank */
+
+/* #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BENCHOPT) */
+	if (policy) {
+		WRITE_ONCE(cqts->pd, init_pd); /* pd */
+		WRITE_ONCE(cqts->rank, init_rank); /* rank */
+		if (p->tgid == mpam_target && !strncmp(p->comm, mpam_sub_target, sub_target_len)) {
+			WRITE_ONCE(cqts->rank, target_rank);
+			WRITE_ONCE(cqts->pd, target_pd);
+		}
+	}
+/* #endif CONFIG_OPLUS_FEATURE_BENCHOPT */
 }
+
+/* #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BENCHOPT) */
+static void cpuqos_v3_task_rename(void __always_unused *data,
+		struct task_struct *tsk, const char *buf)
+{
+	struct cpuqos_task_struct *cqts = &((struct mtk_task *)tsk->android_vendor_data1)->cpuqos_task;
+
+	if (policy) {
+		if (tsk->tgid == mpam_target && !strncmp(buf, mpam_sub_target, sub_target_len)) {
+			WRITE_ONCE(cqts->rank, target_rank);
+			WRITE_ONCE(cqts->pd, target_pd);
+		}
+	}
+}
+/* #endif CONFIG_OPLUS_FEATURE_BENCHOPT */
 
 /* Check if css' path matches any in cpuqos_v3_path_pd_map and cache that */
 static void __init __map_css_pd(struct cgroup_subsys_state *css, char *tmp, int pathlen)
@@ -1139,6 +1196,201 @@ static const struct proc_ops cpuqos_ctl_Fops = {
 	.proc_release = single_release,
 };
 
+/* #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BENCHOPT) */
+void cpuqos_v3_register_cgroup_colocate_ops(int (*set)(int, int), int (*get)(int))
+{
+	group_set_cgroup_colocate = set;
+	group_get_cgroup_colocate = get;
+	pr_info("cpuqos_v3 register group_cgroup_colocate_ops\n");
+}
+EXPORT_SYMBOL(cpuqos_v3_register_cgroup_colocate_ops);
+
+static ssize_t target_proc_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+	char s[64] = {0};
+	unsigned int len = 0;
+
+	len = sprintf(s, "%u\n", mpam_target);
+
+	return simple_read_from_buffer(buf, count, ppos, s, len);
+}
+
+static ssize_t target_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+	char s[32] = {0};
+	int val;
+
+	if (simple_write_to_buffer(s, sizeof(s), ppos, buf, count) <= 0)
+		return -EINVAL;
+
+	if (sscanf(s, "%d", &val) <= 0) {
+		pr_err("cpuqos_v3 error setting argument.\n");
+		return -EINVAL;
+	}
+
+	if (val == -1)
+		return count;
+
+	mpam_target = val;
+
+	return count;
+}
+
+static struct proc_ops target_proc_ops = {
+	.proc_read = target_proc_read,
+	.proc_write = target_proc_write,
+	.proc_lseek = default_llseek,
+};
+
+static ssize_t policy_proc_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+	char s[32] = {0};
+	unsigned int len;
+
+	len = sprintf(s, "policy %d\n", policy);
+
+	return simple_read_from_buffer(buf, count, ppos, s, len);
+}
+
+static ssize_t policy_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+	char s[128] = {0}, sub_target[32] = {0};
+	int pol, pd, rank, tpd, trank, cgrp, flt_grp, mode, pcgrp, bitmap;
+	struct task_struct *p, *t;
+	struct cpuqos_task_struct *cqts;
+
+	if (simple_write_to_buffer(s, sizeof(s), ppos, buf,count) <= 0)
+		return -EINVAL;
+
+	if (sscanf(s, "%d %d %d %d %d %s %d %d %d %d %d",
+				&pol, &pd, &rank, &tpd, &trank, sub_target,
+				&cgrp, &flt_grp, &mode, &pcgrp, &bitmap) <= 0) {
+		pr_err("cpuqos_v3: error setting argument.\n");
+		return -EINVAL;
+	}
+
+	if (pol == -1)
+		return count;
+
+	if (!mpam_target) {
+		pr_err("cpuqos_v3: mpam_target is empty.\n");
+		return -EINVAL;
+	}
+
+	sub_target_len = strlen(sub_target);
+	if (sub_target_len >= TASK_COMM_LEN) {
+		pr_err("cpuqos_v3: error string argument.\n");
+		sub_target_len = 0;
+		return -EINVAL;
+	}
+
+	if (debug)
+		pr_info("cpuqos_v3: %d %d %d %d %d %d %s %d %d %d %d %d",
+				pol, pd, rank, tpd, trank, sub_target_len, sub_target, cgrp, flt_grp, mode, pcgrp, bitmap);
+
+	if (pol == RESET_POLICY || pol == TARGET_POLICY ) {
+		if (pol == TARGET_POLICY) {
+			init_pd = pd;
+			init_rank = rank;
+			target_pd = tpd;
+			target_rank = trank;
+
+			strcpy(mpam_sub_target, sub_target);
+
+			group_set_cgroup_colocate(cgrp, flt_grp);
+			set_cpuqos_mode(mode);
+
+			policy = pol;
+
+			rcu_read_lock();
+			for_each_process_thread(p, t) {
+				cqts = &((struct mtk_task*)t->android_vendor_data1)->cpuqos_task;
+				if ((t->tgid == mpam_target && !strncmp(t->comm, mpam_sub_target, sub_target_len)) || (t->pid == mpam_target)) {
+					WRITE_ONCE(cqts->pd, target_pd);
+					WRITE_ONCE(cqts->rank, target_rank);
+				} else {
+					WRITE_ONCE(cqts->pd, init_pd);
+					WRITE_ONCE(cqts->rank, init_rank);
+				}
+			}
+			rcu_read_unlock();
+
+			set_cache_ctl_user_group(bitmap, pcgrp);
+		} else {
+			policy = pol;
+			mpam_target = 0;
+			memset(mpam_sub_target, 0, TASK_COMM_LEN);
+			sub_target_len = 0;
+
+			init_pd = pd;
+			init_rank = rank;
+			target_pd = tpd;
+			target_rank = trank;
+
+			rcu_read_lock();
+			for_each_process_thread(p, t) {
+				cqts = &((struct mtk_task*)t->android_vendor_data1)->cpuqos_task;
+				WRITE_ONCE(cqts->pd, init_pd);
+				WRITE_ONCE(cqts->rank, init_rank);
+			}
+			rcu_read_unlock();
+
+			set_cpuqos_mode(mode);
+			group_set_cgroup_colocate(cgrp, flt_grp);
+
+			set_cache_ctl_user_group(bitmap, pcgrp);
+		}
+	} else {
+		pr_err("cpuqos_v3 policy out_of_range %d\n", policy);
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static struct proc_ops policy_proc_ops = {
+	.proc_read = policy_proc_read,
+	.proc_write = policy_proc_write,
+	.proc_lseek = default_llseek,
+};
+
+static ssize_t debug_proc_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+	char s[32] = {0};
+	unsigned int len;
+
+	len = sprintf(s, "%u\n", debug);
+
+	return simple_read_from_buffer(buf, count, ppos, s, len);
+}
+
+static ssize_t debug_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+	char s[32] = {0};
+	unsigned int val;
+
+	if (simple_write_to_buffer(s, sizeof(s), ppos, buf,count) <= 0)
+		return -EINVAL;
+
+	if (sscanf(s, "%u\n", &val) <= 0) {
+		pr_err("cpuqos_v3: error setting argument. argument should be greater than or equal to zero.\n");
+		return -EINVAL;
+	}
+
+	debug = val;
+
+	pr_info("cpuqos_v3 debug %u\n", debug);
+
+	return count;
+}
+
+static struct proc_ops debug_proc_ops = {
+	.proc_read = debug_proc_read,
+	.proc_write = debug_proc_write,
+	.proc_lseek = default_llseek,
+};
+/* #endif CONFIG_OPLUS_FEATURE_BENCHOPT */
+
 static int __init cpuqos_v3_proto_init(void)
 {
 	int ret = 0;
@@ -1188,6 +1440,13 @@ static int __init cpuqos_v3_proto_init(void)
 		goto out_attach;
 	}
 
+/* #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BENCHOPT) */
+	ret = register_trace_task_rename(cpuqos_v3_task_rename, NULL);
+	if (ret) {
+		pr_info("register trace_task_rename failed\n");
+	}
+/* #endif CONFIG_OPLUS_FEATURE_BENCHOPT */
+
 	/*
 	 * Ensure the cpuqos mode/pd map update is visible
 	 * before kicking the CPUs.
@@ -1211,6 +1470,12 @@ static int __init cpuqos_v3_proto_init(void)
 		ret = -ENOMEM;
 		goto out;
 	}
+
+/* #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BENCHOPT) */
+	proc_create_data("policy", 0664, parent, &policy_proc_ops, NULL);
+	proc_create_data("target", 0664, parent, &target_proc_ops, NULL);
+	proc_create_data("debug", 0664, parent, &debug_proc_ops, NULL);
+/* #endif CONFIG_OPLUS_FEATURE_BENCHOPT */
 
 	return 0;
 

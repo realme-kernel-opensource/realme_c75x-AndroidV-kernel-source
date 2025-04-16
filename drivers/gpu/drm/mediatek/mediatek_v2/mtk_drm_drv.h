@@ -105,6 +105,7 @@ struct mtk_mmsys_driver_data {
 	void (*update_channel_hrt)(struct mtk_drm_crtc *mtk_crtc,
 			unsigned int bw_base, unsigned int channel_bw[]);
 	unsigned int (*get_channel_idx)(enum CHANNEL_TYPE type, unsigned int i);
+	bool ct_wiat_cmdq_event;
 	void (*update_channel_bw_by_layer)(unsigned int layer, unsigned int bpp,
 			unsigned int *subcomm_bw_sum, unsigned int size,
 			unsigned int bw_base, enum CHANNEL_TYPE type);
@@ -312,6 +313,26 @@ struct mtk_drm_private {
 	atomic_t need_recover;
 
 	unsigned int seg_id;
+
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	struct workqueue_struct *fakeframe_wq;
+	struct hrtimer fakeframe_timer;
+	struct work_struct fakeframe_work;
+	/* add for mux switch control */
+	struct completion switch_te_gate;
+	bool vsync_switch_pending;
+	bool need_vsync_switch;
+	struct workqueue_struct *vsync_switch_wq;
+	struct work_struct vsync_switch_work;
+	/* indicate that whether the current frame backlight has been updated */
+	bool oplus_adfr_backlight_updated;
+	/* need qsync mode recovery after backlight status updated */
+	bool osync_mode_recovery;
+	/* set timer to reset qsync after the backlight is no longer updated */
+	struct hrtimer osync_mode_timer;
+	struct workqueue_struct *osync_mode_wq;
+	struct work_struct osync_mode_work;
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 
 	unsigned int srt_channel_bw_sum[MAX_CRTC][BW_CHANNEL_NR];
 	unsigned int total_srt[MAX_CRTC];

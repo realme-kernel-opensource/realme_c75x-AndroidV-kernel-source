@@ -12,6 +12,8 @@
 #define AUX_IN0_NTC (0)
 #define AUX_IN1_NTC (1)
 #define AUX_IN2_NTC (2)
+#define AUX_IN3_NTC (3)
+#define AUX_IN4_NTC (4)
 
 #define BTS_RAP_PULL_UP_R		100000 /* 100K, pull up resister */
 

@@ -574,6 +574,7 @@ int ssusb_clks_enable(struct ssusb_mtk *ssusb);
 void ssusb_clks_disable(struct ssusb_mtk *ssusb);
 void ssusb_ip_sw_reset(struct ssusb_mtk *ssusb);
 void ssusb_set_power_state(struct ssusb_mtk *ssusb, enum mtu3_power_state);
+int ssusb_wait_power_state(struct ssusb_mtk *ssusb, enum mtu3_power_state);
 void ssusb_set_ux_exit_lfps(struct ssusb_mtk *ssusb);
 void ssusb_set_polling_scdlfps_time(struct ssusb_mtk *ssusb);
 void ssusb_set_txdeemph(struct ssusb_mtk *ssusb);

@@ -59,6 +59,7 @@ unsigned int bdg_tx_mode;
 static int bdg_eint_irq;
 static bool irq_already_requested;
 static atomic_t bdg_eint_wakeup;
+static atomic_t bdg_pwr_on = ATOMIC_INIT(0);
 
 /***** NFC SRCLKENAI0 Interrupt Handler +++ *****/
 static int nfc_eint_irq;
@@ -67,6 +68,10 @@ static bool nfc_irq_already_requested;
 static bool nfc_clk_already_enabled;
 static int mt6382_nfc_gpio_value;
 static bool bdg_spi_already_first_init;
+
+//#ifdef OPLUS_BUG_STABILITY
+static int nfc_clk_mode;
+//#endif
 
 /***** NFC SRCLKENAI0 Interrupt Handler --- *****/
 
@@ -5445,10 +5450,22 @@ int bdg_common_init(enum DISP_BDG_ENUM module,
 	spislv_switch_speed_hz(SPI_TX_LOW_SPEED_HZ, SPI_RX_LOW_SPEED_HZ);
 #endif
 
+//#ifndef OPLUS_BUG_STABILITY
+	/*mtk case ALPS08225966, only when nfc clk mode in "software control" mode,then enable/disable nfc clk output by software method*/
+/*
 	if (nfc_clk_already_enabled)
 		bdg_clk_buf_nfc(1);
 	else
 		bdg_clk_buf_nfc(0);
+*/
+//#else
+	if (nfc_clk_mode == 0) {
+		if (nfc_clk_already_enabled)
+			bdg_clk_buf_nfc(1);
+		else
+			bdg_clk_buf_nfc(0);
+	}
+//#endif
 
 	set_LDO_on(cmdq);
 	set_mtcmos_on(cmdq);
@@ -5542,6 +5559,14 @@ int bdg_common_init(enum DISP_BDG_ENUM module,
 
 	output_debug_signal();
 	//BDG_OUTREG32(cmdq, TX_REG[0]->DSI_RESYNC_CON, 0x0);
+//#ifdef OPLUS_BUG_STABILITY
+	if (nfc_clk_mode == 1) {
+	/*mtk case ALPS08225966, need re-configure mt6382 to hardware control mode when power on mt6382*/
+		DDPMSG("set nfc clk mode as hw ctrl\n");
+		mtk_spi_write(0x000000a0, 0x00000012);
+	}
+//#endif
+	atomic_set(&bdg_pwr_on, 1);
 	//bdg_common_init_for_rx_pat(module, dsi, cmdq);
 
 	DDPMSG("%s-\n", __func__);
@@ -5558,6 +5583,7 @@ int bdg_common_deinit(enum DISP_BDG_ENUM module, void *cmdq, struct mtk_dsi *dsi
 
 	/* close dsi eint */
 	atomic_set(&bdg_eint_wakeup, 0);
+	atomic_set(&bdg_pwr_on, 0);
 
 	/* set spi low speed */
 #if IS_ENABLED(CONFIG_MTK_MT6382_BDG)
@@ -5987,6 +6013,12 @@ void bdg_mipi_clk_change(enum DISP_BDG_ENUM module,
 
 void bdg_clk_buf_nfc(bool onoff)
 {
+
+	if (atomic_read(&bdg_pwr_on) == 0) {
+		DDPMSG("bdg is pwr off!\n");
+		return;
+	}
+
 	if (onoff) {
 		mtk_spi_write(0x000000a0, 0x00000022);
 //		DSI_OUTREGBIT(cmdq, struct CKBUF_CTRL_REG,
@@ -6036,6 +6068,10 @@ irqreturn_t nfc_eint_thread_handler(int irq, void *data)
 
 void nfc_request_eint_irq(void)
 {
+//#ifdef OPLUS_BUG_STABILITY
+	int ret = 0;
+//#endif
+
 	struct device_node *node;
 
 	if (nfc_irq_already_requested) {
@@ -6050,13 +6086,21 @@ void nfc_request_eint_irq(void)
 		return;
 	}
 
-	if (!of_device_is_available(node)) {
-		DDPMSG("%s, mt6382  mt6382_nfc_eint node is not available\n", __func__);
-		return;
+//#ifdef OPLUS_BUG_STABILITY
+	//mtk case ALPS08225966, configure mt6382 to "hardware control" mode according to the dts config.
+	ret = of_property_read_u32(node, "nfc_clk_mode", &nfc_clk_mode);
+	if (!ret) {
+		DDPMSG("%s: get nfc_clk_mode (%d)\n", __func__, nfc_clk_mode);
+		if (nfc_clk_mode == 1) {
+			DDPMSG("set nfc clk mode as hw ctrl\n");
+			mtk_spi_write(0x000000a0, 0x00000012);
+			return;
+		}
 	}
+//#endif
 
 	//get gpio
-	mt6382_nfc_srclk = of_get_named_gpio(node, "mt6382-nfc-srclk", 0);
+	mt6382_nfc_srclk = of_get_named_gpio(node, "mt6382_nfc_srclk", 0);
 	if (mt6382_nfc_srclk < 0)
 		DDPMSG("%s: get NFC SRCLK GPIO failed (%d)", __func__, mt6382_nfc_srclk);
 	else
@@ -6081,6 +6125,8 @@ void nfc_request_eint_irq(void)
 	//get SRCLK status
 	nfc_work_func();
 
+	// enable irq
+	enable_irq(nfc_eint_irq);
 	// enable irq wake
 	irq_set_irq_wake(nfc_eint_irq, 1);
 }

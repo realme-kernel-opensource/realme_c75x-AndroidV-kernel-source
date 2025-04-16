@@ -226,7 +226,7 @@ static s32 mutex_trigger(struct mml_comp *comp, struct mml_task *task,
 			}
 
 			/* make sure mml wait disp frame done in current te */
-			cmdq_pkt_clear_event(pkt, cfg->info.disp_done_event);
+			//cmdq_pkt_clear_event(pkt, cfg->info.disp_done_event);
 
 			/* Note insert disp ready stamp after disp ready event in last mutex,
 			 * but update and retrieve data in first mutex.

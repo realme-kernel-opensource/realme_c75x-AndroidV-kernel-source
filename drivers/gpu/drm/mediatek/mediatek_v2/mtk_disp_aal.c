@@ -53,6 +53,10 @@
 #define MME_AAL_BUFFER_SIZE (240 * 1024)
 #endif
 
+#ifdef OPLUS_FEATURE_DISPLAY_APOLLO
+extern bool oplus_apollo_unsupported(void);
+#endif
+
 #undef pr_fmt
 #define pr_fmt(fmt) "[disp_aal]" fmt
 #define AALERR(fmt, arg...) pr_notice("[ERR]%s:" fmt, __func__, ##arg)
@@ -535,9 +539,13 @@ void disp_aal_notify_backlight_changed(struct mtk_ddp_comp *comp,
 
 	if (trans_backlight == 0) {
 		aal_data->primary_data->backlight_set = trans_backlight;
-
+#ifndef OPLUS_FEATURE_DISPLAY_APOLLO
 		if (aal_data->primary_data->led_type != TYPE_ATOMIC)
 			mtk_leds_brightness_set(connector_id, 0, 0, (0X1<<SET_BACKLIGHT_LEVEL));
+#else
+		if ((aal_data->primary_data->led_type != TYPE_ATOMIC) && oplus_apollo_unsupported())
+			mtk_leds_brightness_set(connector_id, 0, 0, (0X1<<SET_BACKLIGHT_LEVEL));
+#endif
 		/* set backlight = 0 may be not from AAL, */
 		/* we have to let AALService can turn on backlight */
 		/* on phone resumption */
@@ -546,12 +554,16 @@ void disp_aal_notify_backlight_changed(struct mtk_ddp_comp *comp,
 		((aal_data->primary_data->relay_state != 0) &&
 		!pq_data->new_persist_property[DISP_PQ_CCORR_SILKY_BRIGHTNESS])) {
 		/* AAL Service is not running */
-
+#ifndef OPLUS_FEATURE_DISPLAY_APOLLO
 		if (aal_data->primary_data->led_type != TYPE_ATOMIC)
 			mtk_leds_brightness_set(connector_id, trans_backlight,
 						0, (0X1<<SET_BACKLIGHT_LEVEL));
+#else
+		if ((aal_data->primary_data->led_type != TYPE_ATOMIC) && oplus_apollo_unsupported())
+			mtk_leds_brightness_set(connector_id, trans_backlight,
+						0, (0X1<<SET_BACKLIGHT_LEVEL));
+#endif
 	}
-
 	spin_lock_irqsave(&aal_data->primary_data->hist_lock, flags);
 	aal_data->primary_data->hist.backlight = trans_backlight;
 	aal_data->primary_data->hist.panel_nits = panel_nits;
@@ -647,7 +659,7 @@ int led_brightness_changed_event_to_aal(struct notifier_block *nb, unsigned long
 				led_conf->max_hw_brightness, 1);
 		break;
 	case LED_TYPE_CHANGED:
-		pr_info("[leds -> aal] led type changed: %d", led_conf->led_type);
+		DDPINFO("[leds -> aal] led type changed: %d", led_conf->led_type);
 
 		aal_data = comp_to_aal(comp);
 		aal_data->primary_data->led_type = (unsigned int)led_conf->led_type;
@@ -1983,7 +1995,6 @@ static int disp_aal_write_cabc_to_reg(struct mtk_ddp_comp *comp,
 
 	AALFLOW_LOG("\n");
 	if(aal_data->primary_data->aal_fo->mtk_cabc_no_support) {
-		AALFLOW_LOG("mtk_cabc_no_support is true\n");
 		return 0;
 	}
 	if (priv->data->mmsys_id == MMSYS_MT6768 ||
@@ -3406,6 +3417,7 @@ static void disp_aal_config(struct mtk_ddp_comp *comp,
 	int width = cfg->w, height = cfg->h;
 	int out_width = cfg->w;
 	struct mtk_disp_aal *aal_data = comp_to_aal(comp);
+	phys_addr_t dre3_pa = disp_aal_dre3_pa(comp);
 
 	if (comp->mtk_crtc->is_dual_pipe && cfg->tile_overhead.is_support) {
 		width = aal_data->overhead.in_width;
@@ -3508,7 +3520,6 @@ static void disp_aal_config(struct mtk_ddp_comp *comp,
 	}
 
 	if (aal_data->primary_data->aal_fo->mtk_dre30_support) {
-		phys_addr_t dre3_pa = disp_aal_dre3_pa(comp);
 		int dre_alg_mode = 0;
 
 		if (atomic_read(&aal_data->primary_data->change_to_dre30) & 0x1)
@@ -3537,6 +3548,9 @@ static void disp_aal_config(struct mtk_ddp_comp *comp,
 			aal_data->primary_data->disp_clarity_regs) < 0)
 			DDPMSG("%s: clarity_set_reg failed\n", __func__);
 		mutex_unlock(&aal_data->primary_data->config_lock);
+	} else if (aal_data->primary_data->aal_fo->mtk_dre30_support) {
+		cmdq_pkt_write(handle, comp->cmdq_base, dre3_pa + DMDP_AAL_DRE_BILATEAL, 1, ~0);
+		cmdq_pkt_write(handle, comp->cmdq_base, dre3_pa + DMDP_AAL_DRE_BILATERAL_Blending_00, 0, 0x1);
 	}
 	if (aal_data->data->need_bypass_shadow)
 		cmdq_pkt_write(handle, comp->cmdq_base, comp->regs_pa + DISP_AAL_SHADOW_CTRL, 1, AAL_BYPASS_SHADOW);

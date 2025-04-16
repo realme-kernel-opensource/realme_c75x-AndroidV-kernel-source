@@ -160,5 +160,6 @@ struct xpu_dbg_t {
 
 extern void kicker_ppb_request_power(enum ppb_kicker kicker, unsigned int power);
 extern int ppb_set_wifi_pwr_addr(unsigned int val);
+extern int ppb_set_mode(unsigned int mode);
 
 #endif /* __MTK_PEAK_POWER_BUDGETING_H__ */

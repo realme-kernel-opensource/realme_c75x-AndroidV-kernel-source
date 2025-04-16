@@ -20,6 +20,12 @@
 #define P2K(x) ((x) << (PAGE_SHIFT - 10))	/* Converts #Pages to KB */
 #define P2M(x) ((x) >> (20 - PAGE_SHIFT))	/* Converts #Pages to MB */
 
+#if PAGE_SHIFT < 20
+#define M2P(mb)	((mb) << (20 - PAGE_SHIFT))
+#else
+#define M2P(mb)	((mb) >> (PAGE_SHIFT - 20))
+#endif
+
 #define DUMP_INFO_LEN_MAX    (400)
 
 /* Bit map */

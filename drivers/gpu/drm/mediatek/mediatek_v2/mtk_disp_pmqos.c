@@ -43,6 +43,9 @@ module_param(debug_mmqos, int, 0644);
 int debug_deteriorate;
 module_param(debug_deteriorate, int, 0644);
 
+int debug_channel_overlap = 1;
+module_param(debug_channel_overlap, int, 0644);
+
 #if IS_ENABLED(CONFIG_DRM_MEDIATEK_AUTO_AUTO_YCT)
 #define CRTC_NUM		7
 #elif IS_ENABLED(CONFIG_DRM_MEDIATEK_AUTO)
@@ -620,16 +623,76 @@ void mtk_disp_set_channel_hrt_bw(struct mtk_drm_crtc *mtk_crtc, unsigned int bw,
 						__func__, crtc_idx, i, bw, total);
 }
 
+static unsigned int mtk_disp_cal_usage_bw(struct mtk_drm_crtc *mtk_crtc,
+	unsigned int bw_base, int idx)
+{
+	unsigned int compr_ratio = 90;
+	unsigned int pixel_thres = 400;
+	unsigned int bw = 0;
+
+	if (!mtk_crtc->usage_ovl_fmt[idx])
+		return bw;
+
+	// for small-sized layer HRT channel BW
+	if (((mtk_crtc->usage_ovl_roi[idx].width * mtk_crtc->usage_ovl_roi[idx].height)
+			< pixel_thres)
+		&& mtk_crtc->usage_ovl_compr[idx]) {
+		DDPQOS("skip layer:%d HRT channel BW\n", idx);
+		return bw;
+	}
+
+	bw = bw_base * mtk_crtc->usage_ovl_fmt[idx] / 4;
+	if (mtk_crtc->usage_ovl_compr[idx])
+		bw = bw * compr_ratio / 100;
+
+	return bw;
+}
+
+static unsigned int mtk_disp_overlap_bw(struct mtk_drm_crtc *mtk_crtc,
+	unsigned int bw_base, int idx1, int idx2)
+{
+	unsigned int bw_sum, bw1, bw2;
+	struct mtk_rect layer_roi = {0, 0, 0, 0};
+
+	bw1 = mtk_disp_cal_usage_bw(mtk_crtc, bw_base, idx1);
+	bw2 = mtk_disp_cal_usage_bw(mtk_crtc, bw_base, idx2);
+	bw_sum = bw1 + bw2;
+
+	if (!debug_channel_overlap)
+		return bw_sum;
+
+	if (bw1 == 0 || bw2 == 0) {
+		DDPQOS("only 1 layer: idx%d:%u, idx%d:%u\n",
+			idx1, bw1, idx2, bw2);
+		return bw_sum;
+	}
+
+	//two layer overlap, return sum
+	if (mtk_rect_intersect(&mtk_crtc->usage_ovl_roi[idx1],
+		&mtk_crtc->usage_ovl_roi[idx2], &layer_roi)) {
+		DDPQOS("overlap: (%d,%d,%d,%d) & (%d,%d,%d,%d)\n",
+			mtk_crtc->usage_ovl_roi[idx1].x, mtk_crtc->usage_ovl_roi[idx1].y,
+			mtk_crtc->usage_ovl_roi[idx1].width, mtk_crtc->usage_ovl_roi[idx1].height,
+			mtk_crtc->usage_ovl_roi[idx2].x, mtk_crtc->usage_ovl_roi[idx2].y,
+			mtk_crtc->usage_ovl_roi[idx2].width, mtk_crtc->usage_ovl_roi[idx2].height);
+		return bw_sum;
+	}
+
+	//two layer non-overlap, return max
+	DDPQOS("non-overlap: (%d,%d,%d,%d) | (%d,%d,%d,%d), idx%d:%u, idx%d:%u\n",
+		mtk_crtc->usage_ovl_roi[idx1].x, mtk_crtc->usage_ovl_roi[idx1].y,
+		mtk_crtc->usage_ovl_roi[idx1].width, mtk_crtc->usage_ovl_roi[idx1].height,
+		mtk_crtc->usage_ovl_roi[idx2].x, mtk_crtc->usage_ovl_roi[idx2].y,
+		mtk_crtc->usage_ovl_roi[idx2].width, mtk_crtc->usage_ovl_roi[idx2].height,
+		idx1, bw1, idx2, bw2);
+	return (bw1 > bw2) ? bw1 : bw2;
+}
+
 void mtk_disp_update_channel_hrt_MT6991(struct mtk_drm_crtc *mtk_crtc,
 						unsigned int bw_base, unsigned int channel_bw[])
 {
 	int i = 0, j;
-	int max_ovl_phy_layer = 12; // 6991 phy ovl layer num
 	unsigned int subcomm_bw_sum[4] = {0};
-	struct drm_crtc *crtc = &mtk_crtc->base;
-	struct mtk_drm_private *priv = crtc->dev->dev_private;
-	unsigned int crtc_idx = drm_crtc_index(crtc);
-	unsigned int compr_ratio = 90;
 	int oddmr_hrt = 0;
 	struct mtk_ddp_comp *comp;
 
@@ -641,20 +704,23 @@ void mtk_disp_update_channel_hrt_MT6991(struct mtk_drm_crtc *mtk_crtc,
 	 * sub_comm2: exdma4(2) + exdma9(7) + 1_exdma3(9) + 1_exdma6(12)
 	 * sub_comm3: exdma5(3) + exdma8(6) + 1_exdma2(8) + 1_exdma7(13)
 	 */
+
+	subcomm_bw_sum[0] += mtk_disp_overlap_bw(mtk_crtc, bw_base, 0, 5);
+	subcomm_bw_sum[1] += mtk_disp_overlap_bw(mtk_crtc, bw_base, 1, 4);
+	subcomm_bw_sum[2] += mtk_disp_overlap_bw(mtk_crtc, bw_base, 2, 7);
+	subcomm_bw_sum[3] += mtk_disp_overlap_bw(mtk_crtc, bw_base, 3, 6);
+
 	for (i = 0; i < MAX_LAYER_NR; i++) {
 		if (mtk_crtc->usage_ovl_fmt[i]) {
-			unsigned int bw = bw_base * mtk_crtc->usage_ovl_fmt[i] / 4;
+			unsigned int bw = mtk_disp_cal_usage_bw(mtk_crtc, bw_base, i);
 
-			if (mtk_crtc->usage_ovl_compr[i])
-				bw = bw * compr_ratio / 100;
-
-			if (i == 0 || i == 5 || i == 11 || i == 14)
+			if (i == 11 || i == 14)
 				subcomm_bw_sum[0] += bw;
-			else if (i == 1 || i == 4 || i == 10 || i == 15)
+			else if (i == 10 || i == 15)
 				subcomm_bw_sum[1] += bw;
-			else if (i == 2 || i == 7 || i == 9 || i == 12)
+			else if (i == 9 || i == 12)
 				subcomm_bw_sum[2] += bw;
-			else if (i == 3 || i == 6 || i == 8 || i == 13)
+			else if (i == 8 || i == 13)
 				subcomm_bw_sum[3] += bw;
 		}
 	}
@@ -752,20 +818,20 @@ void mtk_disp_hrt_mmclk_request_mt6768(struct mtk_drm_crtc *mtk_crtc, unsigned i
 		ret = regulator_set_voltage(mm_freq_request, req_level[0].volt, INT_MAX);
 		if (ret)
 			DDPPR_ERR("%s:regulator_set_voltage fail\n", __func__);
-		DDPMSG("%s layer_num = %d, volt = %d\n", __func__, layer_num, req_level[0].volt);
+		DDPINFO("%s layer_num = %d, volt = %d\n", __func__, layer_num, req_level[0].volt);
 	} else if ((layer_num > req_level[0].layer_num || bw > hrt_level_bw_mt6768[0])
 			&& layer_num <= req_level[1].layer_num && bw <= hrt_level_bw_mt6768[1]) {
 		icc_set_bw(priv->hrt_bw_request, 0, disp_perfs[HRT_LEVEL_LEVEL1]);
 		ret = regulator_set_voltage(mm_freq_request, req_level[1].volt, INT_MAX);
 		if (ret)
 			DDPPR_ERR("%s:regulator_set_voltage fail\n", __func__);
-		DDPMSG("%s layer_num = %d, volt = %d\n", __func__, layer_num, req_level[1].volt);
+		DDPINFO("%s layer_num = %d, volt = %d\n", __func__, layer_num, req_level[1].volt);
 	} else if (layer_num > req_level[1].layer_num || bw > hrt_level_bw_mt6768[1]) {
 		icc_set_bw(priv->hrt_bw_request, 0, disp_perfs[HRT_LEVEL_LEVEL0]);
 		ret = regulator_set_voltage(mm_freq_request, req_level[2].volt, INT_MAX);
 		if (ret)
 			DDPPR_ERR("%s:regulator_set_voltage fail\n", __func__);
-		DDPMSG("%s layer_num = %d, volt = %d\n", __func__, layer_num, req_level[2].volt);
+		DDPINFO("%s layer_num = %d, volt = %d\n", __func__, layer_num, req_level[2].volt);
 	}
 }
 
@@ -972,7 +1038,7 @@ int mtk_disp_set_hrt_bw(struct mtk_drm_crtc *mtk_crtc, unsigned int bw)
 	if (priv->data->mmsys_id == MMSYS_MT6768 ||
 		priv->data->mmsys_id == MMSYS_MT6761 ||
 		priv->data->mmsys_id == MMSYS_MT6765) {
-		DDPMSG("%s: no need to set module hrt bw for legacy!\n", __func__);
+		DDPINFO("%s: no need to set module hrt bw for legacy!\n", __func__);
 	} else if (!priv->data->respective_ostdl)
 		mtk_disp_set_module_hrt(mtk_crtc, bw, NULL, PMQOS_SET_HRT_BW);
 
@@ -1268,7 +1334,7 @@ void mtk_drm_pan_disp_set_hrt_bw(struct drm_crtc *crtc, const char *caller)
 
 	if (priv->data->update_channel_hrt) {
 		priv->data->update_channel_hrt(mtk_crtc, bw, channel_hrt);
-		DDPINFO("%s channel[%u][%u][%u][%u]", __func__,
+		DDPINFO("%s channel[%u][%u][%u][%u]\n", __func__,
 			channel_hrt[0], channel_hrt[1], channel_hrt[2], channel_hrt[3]);
 		for (i = 0; i < BW_CHANNEL_NR; i++)
 			mtk_disp_set_channel_hrt_bw(mtk_crtc, channel_hrt[i], i);
@@ -1577,8 +1643,10 @@ void mtk_drm_set_mmclk(struct drm_crtc *crtc, int level, bool lp_mode,
 
 	if (final_level >= 0)
 		freq = g_freq_steps[final_level];
-	else
+	else {
 		freq = g_freq_steps[0];
+		final_level = 0;
+	}
 
 	DDPINFO("%s[%d] final_level(freq=%d, %lu) final_lp_mode:%d\n",
 		__func__, __LINE__, final_level, freq, final_lp_mode);

@@ -46,6 +46,7 @@
 #include <linux/arm-smccc.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
 #include <mt-plat/mtk_blocktag.h>
+#include <soc/oplus/device_info.h>
 
 #if IS_ENABLED(CONFIG_DEVICE_MODULES_MMC_MTK_SW_CQHCI)
 #include "mtk-mmc-swcqhci.h"
@@ -4684,6 +4685,10 @@ skip_hwcq:
 #endif
 	msdc_install_tracepoints(host);
 	dev_info(&pdev->dev, "[%s %d]ret=%d\n", __func__, __LINE__, ret);
+	if((!strcmp(mmc_hostname(mmc), "mmc0")) && (!mmc_card_is_removable(mmc))) {
+		pr_err("%s: register emmc device info\n", __func__);
+		register_device_proc_for_emmc("emmc", "emmc_version", mmc);
+	}
 	return 0;
 end:
 	pm_runtime_disable(host->dev);

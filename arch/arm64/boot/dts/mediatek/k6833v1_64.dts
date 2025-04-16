@@ -9,6 +9,22 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/pinctrl/mt6833-pinfunc.h>
 
+/* Trustonic Mobilecore real driver */
+/* #ifdef OPLUS_FEATURE_SECURITY_COMMON */
+&mobicore{
+     trustonic,real-drv = <1>;
+     trustonic,sel2-support = <0>;
+};
+/* #endif OPLUS_FEATURE_SECURITY_COMMON */
+
+&mtkheap_region_svp {
+	status = "ok";
+};
+
+&mtkheap_region_wfd {
+	status = "ok";
+};
+
 /* chosen */
 &chosen {
 	atag,videolfb-fb_base_l = <0x7e605000>;
@@ -36,7 +52,7 @@
 	mt6360pd,intr_gpio = <&pio 11 0x0>;
 };
 
-&pio {
+/*&pio {
 	mtkfb_pins_lcd_bias_enp1: lcd_bias_enp1_gpio {
 		pins_cmd_dat {
 			pinmux = <PINMUX_GPIO137__FUNC_GPIO137>;
@@ -113,9 +129,9 @@
 	pinctrl-1 = <&mtkfb_pins_lcm_rst_out0_gpio>;
 	pinctrl-2 = <&mtkfb_pins_lcm_dsi_te>;
 	status = "okay";
-};
+};*/
 
-&dsi0 {
+/*&dsi0 {
 	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -169,6 +185,7 @@
 		};
 	};
 };
+*/
 
 &keypad {
 	pinctrl-names = "default";
@@ -187,7 +204,7 @@
 };
 
 
-#include "mediatek/cust_mt6833_touch_1080x2300.dtsi"
+//#include "mediatek/cust_mt6833_touch_1080x2300.dtsi"
 /* accdet start */
 &accdet {
 	/* accdet micbias voltage: 0x09:2.85v 0x08:2.8v 0x07,
@@ -217,7 +234,7 @@
 	status = "okay";
 };
 /* accdet end */
-
+/*
 &odm {
 	led0:led@0 {
 		compatible = "mediatek,red";
@@ -277,8 +294,9 @@
 		pwm_config = <0 1 0 0 0>;
 	};
 };
+*/
 /* GPS GPIO standardization start */
-&pio {
+/*&pio {
 	gps_pins_default: gps_default {
 	};
 
@@ -336,9 +354,10 @@
 	pinctrl-6 = <&gps_l5_lna_pins_oh>;
 	status = "okay";
 };
+*/
 /* GPS GPIO standardization end */
-#include "mediatek/cust_mt6833_camera.dtsi"
-#include <k6833v1_64/cust.dtsi>
+//#include "mediatek/cust_mt6833_camera.dtsi"
+//#include <k6833v1_64/cust.dtsi>
 
 
 /*End of this file, DO NOT ADD ANYTHING HERE*/

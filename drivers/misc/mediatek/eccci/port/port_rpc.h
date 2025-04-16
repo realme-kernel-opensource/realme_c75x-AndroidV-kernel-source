@@ -285,5 +285,10 @@ extern int ccci_get_adc_val(void);
 #if IS_ENABLED(CONFIG_MTK_ECCCI_DEBUG_LOG)
 ssize_t port_rpc_ecid_show(char *buf);
 #endif
+//#ifdef OPLUS_FEATURE_THREESTATE_GPIO
+//NETWORK.RF, 2024/07/06, Add for tristate gpio
+extern unsigned int is_project(int project);
+extern int gpio_get_tristate_input(unsigned int pin);
+//#endif /* OPLUS_FEATURE_THREESTATE_GPIO */
 
 #endif	/* __PORT_RPC_H__ */

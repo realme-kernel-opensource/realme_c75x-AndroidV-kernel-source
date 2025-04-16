@@ -15,6 +15,16 @@ IMGSENSOR_DRIVER_OBJ := \
 	../common/$(COMMON_VERSION)/imgsensor_sensor_list.o \
 	imgsensor_clk.o \
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#commented eeprom anil,need to pick from UOS
+IMGSENSOR_DRIVER_OBJ += ../common/$(COMMON_VERSION)/imgsensor_eeprom.o
+IMGSENSOR_DRIVER_OBJ += ../OplusImgsensor/imgsensor_hwcfg_custom_v1.o
+IMGSENSOR_DRIVER_OBJ += ../OplusImgsensor/imgsensor_hwcfg_mt6768.o
+#IMGSENSOR_DRIVER_OBJ += ../OplusImgsensor/imgsensor_hwcfg_custom.o
+#IMGSENSOR_DRIVER_OBJ += ../OplusImgsensor/imgsensor_eeprom.o
+#endif
+
+
 ifeq ($(CONFIG_MTK_IMGSENSOR_ISP4_T), m)
 obj-$(CONFIG_MTK_IMGSENSOR_ISP4_T) += $(MTK_PLATFORM_KO).o
 $(eval $(MTK_PLATFORM_KO)-objs += $(IMGSENSOR_DRIVER_OBJ))
@@ -26,6 +36,7 @@ subdir-ccflags-y += \
     -I$(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION) \
 	-I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/ \
 	-I$(DEVICE_MODULES_PATH)/drivers/i2c/busses/ \
+	-I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/mmdvfs/ \
 	-DNO_I2C_MTK -DNO_CLK_METER -DIMGSENSOR_USE_RPM -DIMGSENSOR_DFS_CTRL_ENABLE -DSENINF_USE_WAKE_LOCK
 
 #For isp4_t ref only

@@ -306,6 +306,13 @@ void set_api_sync_flag(int flag);
 int get_api_sync_flag(void);
 void ged_reset_api_sync_ts(void);
 unsigned long long ged_get_api_sync_ts(void);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_POWERMODEL)
+void ged_log_shadercore_state_notify(u64 shadercorePowerStatus);
+void ged_enable_notify_state(bool enable);
+void ged_eb_clk_change_notify(unsigned int frenew);
+void oplus_check_freq_change_and_notify(void);
+int ged_dvfs_ctrl_oppidx_notify(int cmd);
+#endif
 #define LOADING_ACTIVE 0
 #define LOADING_MAX_3DTA_COM 1
 #define LOADING_MAX_3DTA 2

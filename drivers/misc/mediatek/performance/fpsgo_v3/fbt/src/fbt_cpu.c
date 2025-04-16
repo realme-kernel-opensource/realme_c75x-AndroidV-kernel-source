@@ -372,6 +372,7 @@ static int powerRL_ko_is_ready;
 static int ux_general_policy;
 static int cm_big_cap;
 static int cm_tdiff;
+static int engine_cooler_enable;
 
 module_param(bhr, int, 0644);
 module_param(bhr_opp, int, 0644);
@@ -463,11 +464,13 @@ static int separate_aa;
 static int separate_pct_b;
 static int separate_pct_m;
 static int separate_pct_other;
+static int separate_pct_max_other;
 static int separate_release_sec;
 static int blc_boost;
 static int heavy_group_num;
 static int second_group_num;
 static int group_by_lr;
+static int render_heavy;
 
 static int cluster_num;
 static int nr_freq_cpu;
@@ -1205,7 +1208,7 @@ static void fbt_task_cap(int pid, int min_cap, int min_cap_heavy, int min_cap_se
 		case FPSGO_GROUP_OTHERS:
 			max_cap_other = separate_release_sec ? max_cap_heavy : max_cap_other;
 			max_util_other = separate_release_sec ? max_util_heavy : max_util_other;
-			if (min_cap_other)
+			if (min_cap_other || max_cap_other)
 				fbt_set_per_task_cap(pid, min_cap_other, max_cap_other, max_util_other);
 			else
 				fbt_set_per_task_cap(pid, 0, 100, 1024);
@@ -2018,10 +2021,10 @@ static int fbt_group_by_lr(struct fpsgo_loading dep_arr[], int dep_size, int hea
 		struct fpsgo_loading *fl = &dep_arr[i];
 
 		if (fbt_is_R_L_task(fl->pid, heaviest_pid, second_pid, thr_pid)) {
-			if (fl->pid == heaviest_pid)
-				fl->heavyidx = FPSGO_GROUP_HEAVY;
+			if (render_heavy)
+				fl->heavyidx = fl->pid == thr_pid ? FPSGO_GROUP_HEAVY : FPSGO_GROUP_SECOND;
 			else
-				fl->heavyidx = FPSGO_GROUP_SECOND;
+				fl->heavyidx = fl->pid == thr_pid ? FPSGO_GROUP_SECOND : FPSGO_GROUP_HEAVY;
 		}
 	}
 	ret = 0;
@@ -2473,6 +2476,7 @@ void fbt_set_min_cap_locked(struct render_info *thr, int min_cap,
 	int llf_task_policy_final;
 	int separate_aa_final;
 	int separate_pct_other_final;
+	int separate_pct_max_other_final;
 	int separate_release_sec_final;
 	int boost_affinity_final;
 	int boost_VIP_final;
@@ -2493,6 +2497,10 @@ void fbt_set_min_cap_locked(struct render_info *thr, int min_cap,
 	int max_util_other;
 	int user_cpumask[FPSGO_MAX_GROUP];
 	int powerRL_enable_final;
+#if IS_ENABLED(CONFIG_MTK_ENGINE_COOLER_DISABLE)
+#else
+	int engine_cooler_enable_final;
+#endif
 	struct fbt_boost_info *boost_info;
 
 	if (!uclamp_boost_enable)
@@ -2510,6 +2518,7 @@ void fbt_set_min_cap_locked(struct render_info *thr, int min_cap,
 	separate_aa_final = thr->attr.separate_aa_by_pid;
 	separate_release_sec_final = thr->attr.separate_release_sec_by_pid;
 	separate_pct_other_final = thr->attr.separate_pct_other_by_pid;
+	separate_pct_max_other_final = separate_pct_max_other;
 	boost_affinity_final = thr->attr.boost_affinity_by_pid;
 	boost_LR_final = thr->attr.boost_lr_by_pid;
 	boost_VIP_final = thr->attr.boost_vip_by_pid;
@@ -2523,6 +2532,10 @@ void fbt_set_min_cap_locked(struct render_info *thr, int min_cap,
 	ml_th_final = thr->attr.ml_th_by_pid;
 	gh_prefer_final = thr->attr.gh_prefer_by_pid;
 	powerRL_enable_final = thr->attr.powerRL_enable_by_pid;
+#if IS_ENABLED(CONFIG_MTK_ENGINE_COOLER_DISABLE)
+#else
+	engine_cooler_enable_final = thr->attr.engine_cooler_enable_by_pid;
+#endif
 	boost_info = &(thr->boost_info);
 
 	fbt_get_user_group_setting(thr, user_cpumask);
@@ -2625,6 +2638,13 @@ void fbt_set_min_cap_locked(struct render_info *thr, int min_cap,
 
 
 		heaviest_pid = fbt_get_heaviest_pid(thr->dep_arr, thr->dep_valid_size);
+#if IS_ENABLED(CONFIG_MTK_ENGINE_COOLER_DISABLE)
+#else
+		if (engine_cooler_enable_final)
+			game_set_heaviest_pid(heaviest_pid);
+		else
+			game_set_heaviest_pid(-1);
+#endif
 		second_heavy_pid = fbt_find_second_heavy(thr->dep_arr,
 						thr->dep_valid_size, heaviest_pid);
 		ret = fbt_group_dep(group_by_lr_final, thr->dep_arr, thr->dep_valid_size, heavy_group_num_final,
@@ -2678,8 +2698,8 @@ void fbt_set_min_cap_locked(struct render_info *thr, int min_cap,
 		light_thread = fbt_is_light_loading(fl->loading, loading_th_final);
 
 		min_cap_other = min_cap_m * separate_pct_other_final / 100;
-		max_cap_other = max_cap_m;
-		max_util_other = max_util_m;
+		max_cap_other = max_cap_m * separate_pct_max_other_final / 100;
+		max_util_other = max_util_m * separate_pct_max_other_final / 100;
 		min_cap_other = (min_cap_other > max_cap_other) ? max_cap_other : min_cap_other;
 
 		fbt_tp_control(fl->pid, fl->heavyidx, bm_th_final, ml_th_final, tp_policy_final,
@@ -2831,6 +2851,7 @@ void fbt_set_render_boost_attr(struct render_info *thr)
 	render_attr->powerRL_enable_by_pid = powerRL_enable;
 	render_attr->powerRL_FPS_margin_by_pid = powerRL_FPS_margin;
 	render_attr->powerRL_cap_limit_range_by_pid = powerRL_cap_limit_range;
+	render_attr->engine_cooler_enable_by_pid = engine_cooler_enable;
 
 #if FPSGO_MW
 	fpsgo_attr = fpsgo_find_attr_by_pid(thr->tgid, 0);
@@ -3027,6 +3048,8 @@ void fbt_set_render_boost_attr(struct render_info *thr)
 		render_attr->powerRL_FPS_margin_by_pid = pid_attr.powerRL_FPS_margin_by_pid;
 	if (pid_attr.powerRL_cap_limit_range_by_pid != BY_PID_DEFAULT_VAL)
 		render_attr->powerRL_cap_limit_range_by_pid = pid_attr.powerRL_cap_limit_range_by_pid;
+	if (pid_attr.engine_cooler_enable_by_pid != BY_PID_DEFAULT_VAL)
+		render_attr->engine_cooler_enable_by_pid = pid_attr.engine_cooler_enable_by_pid;
 
 by_tid:
 	fpsgo_attr_tid = fpsgo_find_attr_by_tid(thr->pid, 0);
@@ -3541,7 +3564,6 @@ static void fbt_do_jerk_locked(struct render_info *thr, struct fbt_jerk *jerk, i
 	switch (do_jerk) {
 	case FPSGO_JERK_ONLY_CEILING_WAIT_ENQ:
 	case FPSGO_JERK_ONLY_CEILING_WAIT_DEQ:
-		fbt_do_jerk_boost(thr, temp_blc, temp_blc_b, temp_blc_m, 0, FPSGO_JERK_FIRST);
 		fbt_set_hard_limit_locked(FPSGO_HARD_CEILING, pld);
 		fbt_set_ceiling(pld, thr->pid, thr->buffer_id);
 		thr->boost_info.cur_stage = FPSGO_JERK_FIRST;
@@ -3549,21 +3571,21 @@ static void fbt_do_jerk_locked(struct render_info *thr, struct fbt_jerk *jerk, i
 			max_blc_stage = FPSGO_JERK_FIRST;
 			fpsgo_systrace_c_fbt_debug(-100, 0, max_blc_stage, "max_blc_stage");
 		}
+		fbt_do_jerk_boost(thr, temp_blc, temp_blc_b, temp_blc_m, 0, FPSGO_JERK_FIRST);
 		break;
 	case FPSGO_JERK_NEED:
+		fbt_set_hard_limit_locked(FPSGO_HARD_CEILING, pld);
+		fbt_set_ceiling(pld, thr->pid, thr->buffer_id);
+		thr->boost_info.cur_stage = FPSGO_JERK_FIRST;
+		if (thr->pid == max_blc_pid && thr->buffer_id == max_blc_buffer_id) {
+			max_blc_stage = FPSGO_JERK_FIRST;
+			fpsgo_systrace_c_fbt_debug(-100, 0, max_blc_stage, "max_blc_stage");
+		}
 		fbt_do_jerk_boost(thr, blc_wt, blc_wt_b, blc_wt_m, 0, FPSGO_JERK_FIRST);
 		thr->boost_info.last_blc = blc_wt;
 		if (separate_aa_final) {
 			thr->boost_info.last_blc_b = blc_wt_b;
 			thr->boost_info.last_blc_m = blc_wt_m;
-		}
-
-		fbt_set_hard_limit_locked(FPSGO_HARD_CEILING, pld);
-		fbt_set_ceiling(pld, thr->pid, thr->buffer_id);
-		thr->boost_info.cur_stage = FPSGO_JERK_FIRST;
-		if (thr->pid == max_blc_pid && thr->buffer_id == max_blc_buffer_id) {
-			max_blc_stage = FPSGO_JERK_FIRST;
-			fpsgo_systrace_c_fbt_debug(-100, 0, max_blc_stage, "max_blc_stage");
 		}
 		break;
 	case FPSGO_JERK_POSTPONE:
@@ -6146,6 +6168,11 @@ static void fbt_frame_start(struct render_info *thr, unsigned long long ts)
 	boost->quantile_cpu_time = q_c_time;
 	boost->quantile_gpu_time = q_g_time;
 
+#if IS_ENABLED(CONFIG_MTK_ENGINE_COOLER_DISABLE)
+#else
+	game_set_fps(thr->pid, targetfpks);
+#endif
+
 	fpsgo_systrace_c_fbt(thr->pid, thr->buffer_id, targetfps, "expected_fps");
 	fpsgo_systrace_c_fbt_debug(thr->pid, thr->buffer_id, targettime, "expected_time");
 
@@ -7947,6 +7974,11 @@ static ssize_t fbt_attr_by_pid_store(struct kobject *kobj,
 			boost_attr->powerRL_cap_limit_range_by_pid = val;
 		else if (val == BY_PID_DEFAULT_VAL && action == 'u')
 			boost_attr->powerRL_cap_limit_range_by_pid = BY_PID_DEFAULT_VAL;
+	} else if (!strcmp(cmd, "engine_cooler_enable")) {
+		if ((val <= 1 && val >= 0) && action == 's')
+			boost_attr->engine_cooler_enable_by_pid = val;
+		else if (val == BY_PID_DEFAULT_VAL && action == 'u')
+			boost_attr->engine_cooler_enable_by_pid = BY_PID_DEFAULT_VAL;
 	} else if (!strcmp(cmd, "rl_l2q_enable")) {
 		if ((val <= 1 && val >= 0) && action == 's')
 			boost_attr->l2q_enable_by_pid = val;
@@ -9514,6 +9546,10 @@ FBT_SYSFS_READ(vip_follow_gh, fbt_mlock, vip_follow_gh);
 FBT_SYSFS_WRITE_VALUE(vip_follow_gh, fbt_mlock, vip_follow_gh, 0, 1);
 static KOBJ_ATTR_RW(vip_follow_gh);
 
+FBT_SYSFS_READ(render_heavy, fbt_mlock, render_heavy);
+FBT_SYSFS_WRITE_VALUE(render_heavy, fbt_mlock, render_heavy, 0, 1);
+static KOBJ_ATTR_RW(render_heavy);
+
 FBT_SYSFS_READ(limit_cfreq2cap, fbt_mlock, limit_cfreq2cap);
 FBT_SYSFS_WRITE_VALUE(limit_cfreq2cap, fbt_mlock, limit_cfreq2cap, 0, 4000000);
 static KOBJ_ATTR_RW(limit_cfreq2cap);
@@ -9529,6 +9565,10 @@ static KOBJ_ATTR_RW(limit_cfreq2cap_m);
 FBT_SYSFS_READ(limit_rfreq2cap_m, fbt_mlock, limit_rfreq2cap_m);
 FBT_SYSFS_WRITE_VALUE(limit_rfreq2cap_m, fbt_mlock, limit_rfreq2cap_m, 0, 4000000);
 static KOBJ_ATTR_RW(limit_rfreq2cap_m);
+
+FBT_SYSFS_READ(separate_pct_max_other, fbt_mlock, separate_pct_max_other);
+FBT_SYSFS_WRITE_VALUE(separate_pct_max_other, fbt_mlock, separate_pct_max_other, 0, 100);
+static KOBJ_ATTR_RW(separate_pct_max_other);
 
 FBT_SYSFS_READ(jank_min_cap_ratio, fbt_mlock, jank_min_cap_ratio);
 FBT_SYSFS_WRITE_VALUE(jank_min_cap_ratio, fbt_mlock, jank_min_cap_ratio, 1, 100000);
@@ -9585,6 +9625,10 @@ static KOBJ_ATTR_RW(powerRL_total_unit);
 FBT_SYSFS_READ(powerRL_voltage, fbt_mlock, powerRL_voltage);
 FBT_SYSFS_WRITE_VALUE(powerRL_voltage, fbt_mlock, powerRL_voltage, 1, 10);
 static KOBJ_ATTR_RW(powerRL_voltage);
+
+FBT_SYSFS_READ(engine_cooler_enable, fbt_mlock, engine_cooler_enable);
+FBT_SYSFS_WRITE_VALUE(engine_cooler_enable, fbt_mlock, engine_cooler_enable, 0, 1);
+static KOBJ_ATTR_RW(engine_cooler_enable);
 
 void fbt_init_cpu_loading_info(void)
 {
@@ -9674,6 +9718,7 @@ void __exit fbt_cpu_exit(void)
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_separate_pct_b);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_separate_pct_m);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_separate_pct_other);
+	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_separate_pct_max_other);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_separate_release_sec);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_blc_boost);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_bm_th);
@@ -9683,6 +9728,7 @@ void __exit fbt_cpu_exit(void)
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_heavy_group_num);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_second_group_num);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_group_by_lr);
+	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_render_heavy);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_boost_VIP);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_cpumask_heavy);
 	fpsgo_sysfs_remove_file(fbt_kobj, &kobj_attr_cpumask_second);
@@ -9829,6 +9875,7 @@ int __init fbt_cpu_init(void)
 	separate_pct_b = 0;
 	separate_pct_m = 0;
 	separate_pct_other = 100;
+	separate_pct_max_other = 100;
 	separate_release_sec = 0;
 	blc_boost = DEFAULT_BLC_BOOST;
 	heavy_group_num = DEFAULT_HEAVY_GROUP_NUM;
@@ -9876,6 +9923,8 @@ int __init fbt_cpu_init(void)
 	powerRL_voltage_unit = DEFAULT_POWERRL_VOLTAGE_UNIT;
 	powerRL_total_unit= DEFAULT_POWERRL_TOTAL_UNIT;
 	powerRL_voltage = DEFAULT_POWERRL_VOLTAGE;
+
+	engine_cooler_enable = 0;
 
 	if (cluster_num <= 0)
 		FPSGO_LOGE("cpufreq policy not found");
@@ -9948,6 +9997,7 @@ int __init fbt_cpu_init(void)
 		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_heavy_group_num);
 		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_second_group_num);
 		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_group_by_lr);
+		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_render_heavy);
 		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_boost_VIP);
 		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_bm_th);
 		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_ml_th);
@@ -9987,6 +10037,8 @@ int __init fbt_cpu_init(void)
 		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_powerRL_voltage_unit);
 		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_powerRL_total_unit);
 		fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_powerRL_voltage);
+                fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_engine_cooler_enable);
+                fpsgo_sysfs_create_file(fbt_kobj, &kobj_attr_separate_pct_max_other);
 	}
 
 	bat_psy = power_supply_get_by_name("battery");

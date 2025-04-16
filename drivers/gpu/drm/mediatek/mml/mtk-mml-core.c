@@ -2475,11 +2475,10 @@ struct mml_task *mml_core_create_task(u32 jobid)
 
 		mml_err("too many mml tasks:%d job %u",
 			atomic_read(&mml_task_ref), jobid);
-
 		if (!aeeonce) {
 			aeeonce = true;
 			mml_fatal("mml", "too many mml tasks:%d job %u",
-				atomic_read(&mml_task_ref), jobid);
+			atomic_read(&mml_task_ref), jobid);
 		}
 
 	}

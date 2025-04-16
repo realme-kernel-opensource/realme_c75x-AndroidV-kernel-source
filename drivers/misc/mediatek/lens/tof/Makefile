@@ -36,3 +36,6 @@ stmvl53l4-objs += /core/src/vl53lx_hist_algos_gen3.o
 stmvl53l4-objs += /core/src/vl53lx_hist_algos_gen4.o
 stmvl53l4-objs += /core/src/vl53lx_hist_char.o
 stmvl53l4-objs += /core/src/vl53lx_sigma_estimate.o
+
+obj-$(CONFIG_MTK_V4L2_LENS)   += vl53l0/
+

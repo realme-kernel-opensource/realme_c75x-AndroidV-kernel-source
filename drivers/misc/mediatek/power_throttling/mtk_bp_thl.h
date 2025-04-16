@@ -45,6 +45,7 @@ void register_bp_thl_md_notify(
 		BATTERY_PERCENT_PRIO prio_val);
 void unregister_bp_thl_notify(BATTERY_PERCENT_PRIO prio_val);
 void set_bp_thl_ut_status(int status);
+extern int bp_set_user_enable(unsigned int enable);
 #endif
 
 

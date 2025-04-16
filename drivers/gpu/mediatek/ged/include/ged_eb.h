@@ -153,7 +153,8 @@ enum gpu_fastdvfs_counter {
 	FASTDVFS_GPU_EB_CMD_LOADING_WIN_SIZE = 430,
 	FASTDVFS_GPU_EB_CMD_TIMER_BASE_DVFS_MARGIN = 431,
 	FASTDVFS_GPU_EB_LOG_DUMP_PREOC = 432,
-	NR_FASTDVFS_COUNTER = 442,
+	FASTDVFS_GPU_EB_USE_IDX_NOTIFY = 442,
+	NR_FASTDVFS_COUNTER = 443,
 };
 
 /* 6989 0x117800~0x117C00 */
@@ -623,6 +624,11 @@ enum gpu_fastdvfs_counter {
 (														\
 (FASTDVFS_GPU_EB_LOG_DUMP_PREOC *SYSRAM_LOG_SIZE)	\
 )
+#define SYSRAM_GPU_EB_USE_IDX_NOTIFY                \
+(														\
+(FASTDVFS_GPU_EB_USE_IDX_NOTIFY *SYSRAM_LOG_SIZE)	\
+)
+
 
 enum action_map {
 	ACTION_MAP_FASTDVFS = 0,
@@ -630,6 +636,15 @@ enum action_map {
 
 	NR_ACTION_MAP
 };
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_POWERMODEL)
+enum gpudvfs_oppidx_cmd {
+	OPLUSCMD_DISABLE_OPPIDX_EVENT = 0,
+	OPLUSCMD_ENABLE_OPPIDX_EVENT = 2,
+
+	NR_OPLUSCMD
+};
+#endif
 
 /**************************************************
  * GPU FAST DVFS IPI CMD
@@ -686,6 +701,7 @@ enum {
 	GPUFDVFS_IPI_EVENT_CLK_CHANGE = 1,
 	GPUFDVFS_IPI_EVENT_DEBUG_MODE_ON = 2,
 	GPUFDVFS_IPI_EVENT_DEBUG_DATA = 3,
+	GPUFDVFS_IPI_EVENT_IDX_CHANGE = 4,
 
 	NR_GPUFDVFS_IPI_EVENT_CMD,
 };
@@ -693,6 +709,7 @@ enum {
 struct GED_EB_EVENT {
 	int cmd;
 	unsigned int freq_new;
+	unsigned int idx[2];
 	struct work_struct sWork;
 	bool bUsed;
 };
@@ -759,6 +776,9 @@ void mtk_gpueb_set_power_state(enum ged_gpu_power_state power_state);
 u64 mtk_gpueb_read_soc_timer(void);
 void mtk_gpueb_record_soc_timer(u64 soc_timer);
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_POWERMODEL)
+int oplus_gpueb_dvfs_notify_oppidx(int enable);
+#endif
 
 extern int fastdvfs_proc_init(void);
 extern void fastdvfs_proc_exit(void);

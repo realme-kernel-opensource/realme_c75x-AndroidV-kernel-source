@@ -589,6 +589,10 @@
 #define USB_SID_DISPLAYPORT	0xff01	/* display port */
 #define USB_SID_TBT		0x8087	/* Thunderbolt */
 #define USB_VID_MQP		0x1748
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* add for pd svoioc flow */
+#define USB_VID_OPLUS		0x22d9
+#endif
 
 #define DP_ALT_MODE_CABLE_SVIDS_CNT	2
 

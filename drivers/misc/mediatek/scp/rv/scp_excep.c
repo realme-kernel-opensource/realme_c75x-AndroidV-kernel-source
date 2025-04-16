@@ -22,6 +22,9 @@
 #include "scp_excep.h"
 #include "scp_feature_define.h"
 #include "scp_l1c.h"
+#if defined(CONFIG_OPLUS_FEATURE_FEEDBACK) || defined(CONFIG_OPLUS_FEATURE_FEEDBACK_MODULE)
+#include <soc/oplus/system/kernel_fb.h>
+#endif
 
 #if IS_ENABLED(CONFIG_OF_RESERVED_MEM)
 #include <linux/of_reserved_mem.h>
@@ -716,6 +719,9 @@ void scp_aed(enum SCP_RESET_TYPE type, enum scp_core_id id)
 	size_t timeout = msecs_to_jiffies(SCP_COREDUMP_TIMEOUT_MS);
 	size_t expire = jiffies + timeout;
 	int ret;
+#if defined(CONFIG_OPLUS_FEATURE_FEEDBACK) || defined(CONFIG_OPLUS_FEATURE_FEEDBACK_MODULE)
+	unsigned char fb_str[256] = "";
+#endif
 
 	if (!scp_ee_enable) {
 		pr_debug("[SCP]ee disable value=%d\n", scp_ee_enable);
@@ -789,6 +795,17 @@ void scp_aed(enum SCP_RESET_TYPE type, enum scp_core_id id)
 		/* scp aed api, only detail information available*/
 		aed_common_exception_api("scp", NULL, 0, NULL, 0,
 			scp_dump.detail_buff, DB_OPT_DEFAULT);
+#if defined(CONFIG_OPLUS_FEATURE_FEEDBACK) || defined(CONFIG_OPLUS_FEATURE_FEEDBACK_MODULE)
+		if (scpreg.core_nums == 2) {
+			scnprintf(fb_str,sizeof(fb_str),"%s: core0 pc:0x%08x,lr:0x%08x;core1 pc:0x%08x,lr:0x%08x:$$module@@scp",
+				scp_aed_title,c0_m->pc,c0_m->lr,c1_m->pc,c1_m->lr);
+		} else {
+			scnprintf(fb_str,sizeof(fb_str),"%s: core0 pc:0x%08x,lr:0x%08x:$$module@@scp",
+			scp_aed_title,c0_m->pc,c0_m->lr);
+		}
+		oplus_kevent_fb_str(FB_SENSOR,FB_SENSOR_ID_CRASH,fb_str);
+		pr_notice("scp_aed feedback is running.\n");
+#endif
 	}
 #endif
 

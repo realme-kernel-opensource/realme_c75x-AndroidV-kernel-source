@@ -106,6 +106,15 @@ config MTK_MT6382_BDG
 	  Normal project will disable it first
 	  If you are not sure about this, do not set it to y
 
+config MTK_ROUND_CORNER_SUPPORT
+	bool "enable medietak display round corner"
+	default n
+	help
+	  define CONFIG_MTK_ROUND_CORNER_SUPPORT to enable Mediatek Round Corner on display.
+	  If you want to use Meditek Round Corner on display, please make sure it is Y in xxx_defconfig.mk.
+	  This feature require round corner pattern provided in lcm driver folder.
+	  If unsure, set N.
+
 config MTK_SE_SUPPORT
 	bool "Support auto RVC and AVM"
 	help
@@ -118,6 +127,13 @@ config MTK_SE_SUPPORT
 	  advantage of the SurfaceEngine's hardware acceleration for rendering,
 	  you should enable this option. Otherwise, it can be left disabled to
 	  reduce the driver's footprint.
+
+config OPLUS_FEATURE_DISPLAY_MAINLINE
+	bool "Support oplus display mainline feature"
+	help
+	  Define CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE to support oplus display mainline feature.
+	  If you want to use oplus display mainline feature, you should set CONFIG_OPLUS_FEATURE_DISPLAY_MAINLINE
+	  to y or m in the platform config file like oplusxxxx.config.
 
 config MTK_DISP_MMDVFS_INIT_SEQUENCE
 	bool "Configure initialization sequence of DISP and MMDVFS"

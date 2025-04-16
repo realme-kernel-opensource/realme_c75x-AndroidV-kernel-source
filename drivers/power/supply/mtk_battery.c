@@ -34,8 +34,414 @@
 #include <mt-plat/aee.h>
 #endif
 
-
 struct mtk_battery *gmb;
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#include <linux/iio/consumer.h>
+
+#define PMIC_RG_FGADC_RST_SRC_SEL 0xc2c
+
+static int bat_temperature_high_precision_val = 0;
+#if (defined(CONFIG_OPLUS_CHARGER_MTK6877) || defined(CONFIG_OPLUS_CHARGER_MTK6769R) || defined(CONFIG_OPLUS_CHARGER_MTK6833))
+extern void register_mtk_oplus_batt_interfaces(struct mtk_oplus_batt_interface *intf);
+bool oplus_set_charge_power_sel(int select);
+/* Structure to define dependencies of MTK charger module code on OPLUS charger framework */
+struct mtk_oplus_batt_interface mtk_oplus_batt_intf = {
+	.set_charge_power_sel = oplus_set_charge_power_sel,
+};
+#endif
+
+bool is_battery_init_done(void);
+
+extern struct iio_channel *iio_channel_get(struct device *dev,const char *channel_name);
+extern bool pmic_chrdet_status(void);
+extern int get_batt_id_ntc_volt(void);
+extern bool is_kthread_get_adc(void);
+extern int wakeup_fg_algo(struct mtk_battery *gm, unsigned int flow_state);
+bool is_recovery_mode(struct mtk_battery *gm);
+
+int fuelgauge_apply = 0;
+int fgauge_is_start = 0;
+int enable_is_force_full = 0;
+int use_mt6360 = 0;
+int use_mt6370 = 0;
+int odm_select_bat_ntc_support = 0;
+int is_4450mv_battery_support = 0;
+int is_subboard_temp_support = 0;
+int for_mtk_60w_support = 0;
+int use_mt6768 = 0;
+int is_get_tbat_support = 0;
+int bat_temp_01c_precision = 0;
+int batt_barcode_read_support = 0;
+int reprobe_cnt = 0;
+int removed_bat_decidegc;
+int external_authenticate_support = 0;
+
+#define MAX_REPROBE_CNT 20
+
+struct iio_channel	*batt_id = NULL;
+struct iio_channel	*flash_ntc_id = NULL;
+
+#ifdef CONFIG_OPLUS_CHARGER_MTK6853
+extern int is_vooc_support_single_batt_svooc(void);
+#endif
+
+extern int mt6360_get_batid_volt(int *volt);
+
+enum {
+	BAT_TYPE__UNKNOWN,
+	BAT_TYPE__SDI_4350mV, /*50mV~290mV*/
+	BAT_TYPE__SDI_4400mV, /*300mV~520mV*/
+	BAT_TYPE__LG_4350mV, /*NO use*/
+	BAT_TYPE__LG_4400mV, /*530mV~780mV*/
+	BAT_TYPE__ATL_4350mV, /*1110mV~1450mV*/
+	BAT_TYPE__ATL_4400mV, /*790mV~1100mV*/
+	BAT_TYPE__TWS_4400mV,
+	BAT_TYPE__COS_4450mV,
+	BAT_TYPE__LIW_4450mV,
+	BAT_TYPE__ATL_4450mV,	/*550mV~790mV*/
+	BAT_TYPE__SDI_4450mV,   /*1040mV~1325mV*/
+	/* use batt barcode
+	 * BAT_TYPE__core_limitedvol_module
+	 */
+	BAT_TYPE__ATL_4480mV_NVT,
+	BAT_TYPE__ATL_4480mV_ATLINDIA,
+	BAT_TYPE__GUANYU_4480mV_GUANYU,
+	BAT_TYPE__LIWEI_4500mV_GUANYU,
+	BAT_TYPE__LIWEI_4500mV_NVT,
+	BAT_TYPE__LIWEI_4500mV_NVTINDIA,
+	BAT_TYPE__LIWEI_4500mV_NVTINDONESIA,
+};
+
+enum {
+	BATT_ID_0,
+	BATT_ID_1,
+	BATT_ID_2,
+	BATT_ID_3,
+	BATT_ID_4,
+};
+
+#define BAT_ID (3) /*AUXIN3*/
+#define ADC_VOL_UNIT 1500
+#define ADC_VOL_SIZE 4096
+#define ADC_VOL_PRO  1000
+#define BATTID_ARR_LEN 16
+#define BATTID_ARR_WIDTH 2
+#define  BATTID_CHECK_TIME 5
+#define  BATTID_CHECK_DATA_NUM 4
+
+#ifndef	CONFIG_MACH_MT6781
+#define RBAT_PULL_DOWN_R 24000
+#endif
+int __attribute__((weak)) oplus_force_get_subboard_temp(void)
+{
+	return DEFAULT_BATT_TEMP_TEN;
+}
+
+int __attribute__((weak)) oplus_chg_get_subboard_temp_cal(void)
+{
+	return DEFAULT_BATT_TEMP_TEN;
+}
+
+void __attribute__((weak)) oplus_chg_adc_switch_ctrl(void)
+{
+	return;
+}
+
+#include <soc/oplus/device_info.h>
+#include <soc/oplus/system/oplus_project.h>
+#include <linux/gpio.h>
+#include "../../oplus/oplus_gauge.h"
+#include "../../oplus/gauge_ic/oplus_optiga/oplus_optiga.h"
+
+bool __attribute__((weak)) oplus_optiga_get_init_done(void)
+{
+	return true;
+}
+
+int __attribute__((weak)) oplus_get_batt_id_use_barcode(void)
+{
+	return 0;
+}
+
+bool __attribute__((weak)) is_kthread_get_adc(void)
+{
+	return false;
+}
+
+int get_batt_id_ntc_volt(void)
+{
+	return 80;
+}
+
+struct oplus_optiga_chip * __attribute__((weak)) oplus_get_optiga_info (void)
+{
+	return NULL;
+}
+
+bool is_fuelgauge_apply(void)
+{
+	return fuelgauge_apply;
+}
+EXPORT_SYMBOL(is_fuelgauge_apply);
+
+void dis_GM3_SRC_SEL(struct mtk_gauge *gauge)
+{
+	unsigned int reset_sel;
+
+	regmap_read(gauge->regmap, PMIC_RG_FGADC_RST_SRC_SEL, &reset_sel);
+
+	if (reset_sel == 1) {
+		regmap_write(gauge->regmap, PMIC_RG_FGADC_RST_SRC_SEL, 0);
+		bm_err(gauge->gm, "DISABLE GM3! set PMIC_RG_FGADC_RST_SRC_SEL to 0\n");
+	}
+}
+EXPORT_SYMBOL(dis_GM3_SRC_SEL);
+
+bool prj_is_4450mv_battery_support(void)
+{
+	return is_4450mv_battery_support;
+}
+
+bool prj_is_subboard_temp_support(void)
+{
+	return is_subboard_temp_support;
+}
+EXPORT_SYMBOL(prj_is_subboard_temp_support);
+
+bool prj_for_mtk_60w_support(void)
+{
+	return for_mtk_60w_support;
+}
+EXPORT_SYMBOL(prj_for_mtk_60w_support);
+
+bool prj_use_mt6768(void)
+{
+	return use_mt6768;
+}
+
+bool prj_bat_temp_01c_precision(void)
+{
+	return bat_temp_01c_precision;
+}
+
+#define TBATT_PRECISION_VAL_TEN -1270
+#define TBATT_PRECISION_VAL -127
+extern int oplus_gauge_get_batt_current(void);
+extern int oplus_chg_get_soc(void);
+extern int oplus_chg_get_ui_soc(void);
+extern int oplus_gauge_get_batt_temperature(void);
+extern int pmic_get_battery_voltage(void);
+extern int gauge_get_average_current(bool *valid);
+extern bool gauge_get_current(int *bat_current);
+int oplus_battery_get_bat_temperature(void)
+{
+	int batt_temp = 0;
+
+	if(is_fuelgauge_apply() == false){
+		return gauge_get_property(gmb, GAUGE_PROP_BATTERY_TEMPERATURE_ADC, &batt_temp);
+		return batt_temp/10;
+	}
+	if (prj_for_mtk_60w_support() == true && prj_is_subboard_temp_support()) {
+		return oplus_chg_get_subboard_temp_cal();  // TO DO
+	}
+	/* TODO */
+	if (is_battery_init_done()) {
+#if defined(CONFIG_OPLUS_CHARGER_MTK6853) || defined(CONFIG_OPLUS_CHARGER_MTK6833)
+		force_get_tbat(gmb, true);
+		return bat_temperature_high_precision_val;
+#else
+		if (prj_bat_temp_01c_precision() == true) {
+			force_get_tbat(gmb, true);
+			return bat_temperature_high_precision_val;
+		} else if ((odm_select_bat_ntc_support == ODM_SPACE_B_33W) || (odm_select_bat_ntc_support == ODM_SPACE_D_18W)) {
+			force_get_tbat(gmb, true);
+			return gmb->tbat_precise;
+		}
+		if (get_project() == 21081) {
+			force_get_tbat(gmb, true);
+			return gmb->tbat_precise;
+		} else {
+			return force_get_tbat(gmb, true);
+		}
+#endif
+	} else {
+		if(gmb->support_ntc_01c_precision)
+			return TBATT_PRECISION_VAL_TEN;
+		else
+			return TBATT_PRECISION_VAL;
+	}
+}
+
+static int meter_fg_30_get_battery_mvolts(void)
+{
+	int batt_volt;
+
+	batt_volt = gauge_get_int_property(gmb, GAUGE_PROP_BATTERY_VOLTAGE);
+	batt_volt -= 10;
+	return batt_volt;
+}
+
+static int meter_fg_30_get_battery_temperature(void);
+static int meter_fg_30_get_battery_temperature(void)
+{
+	int ret = 0;
+
+#ifdef CONFIG_OPLUS_CHARGER_MTK6853
+/* mt6853 some prj use subboard temp as battery temp need distinguish with other plat*/
+	if (is_vooc_support_single_batt_svooc() == true){
+		if(is_get_tbat_support == true){
+			ret = oplus_battery_get_bat_temperature();
+		} else {
+				ret = oplus_force_get_subboard_temp();
+		}
+
+	} else {
+		ret = oplus_battery_get_bat_temperature();
+	}
+	if (get_project() == 20001 || get_project() == 20002 || get_project() == 20003 ||
+		get_project() == 20200 || get_project() == 20638 || get_project() == 20639 || get_project() == 0x206B7){
+		return ret * 10;
+	}
+	return ret;
+#elif defined CONFIG_OPLUS_CHARGER_MTK6833
+	ret = oplus_battery_get_bat_temperature();
+	return ret;
+#else
+	ret = oplus_battery_get_bat_temperature();
+	if ((prj_for_mtk_60w_support() == true && prj_is_subboard_temp_support()) || get_project() == 21081 || prj_bat_temp_01c_precision() == true || (odm_select_bat_ntc_support == ODM_SPACE_B_33W) || (odm_select_bat_ntc_support == ODM_SPACE_D_18W)) {
+		return ret;
+	}
+	return ret * 10;
+#endif
+}
+
+static int meter_fg_30_get_battery_soc(void)
+{
+	if(gmb->init_flag == 1) {
+		return gmb->ui_soc;
+	} else {
+		return -1;
+	}
+}
+
+static int meter_fg_30_get_average_current(void)
+{
+	int bat_current = 0;
+	bat_current = gauge_get_int_property(gmb, GAUGE_PROP_BATTERY_CURRENT);
+	bat_current = 0 - bat_current / 10;
+
+	return bat_current;
+}
+
+int meter_fg_30_get_bat_charging_current(void);
+int meter_fg_30_get_bat_charging_current(void)
+{
+	return meter_fg_30_get_average_current();
+}
+
+static int meter_fg_30_get_prev_battery_fcc(void)
+{
+        pr_err("%s: prev_batt_fcc value is %d", __func__, gmb->prev_batt_fcc);
+        if (gmb->prev_batt_fcc == 0)
+                return 5042;
+        else
+                return gmb->prev_batt_fcc/10;
+}
+
+static int meter_fg_30_get_battery_fcc(void)
+{
+        pr_err("%s: prev_batt_fcc value is %d", __func__, gmb->prev_batt_fcc);
+        if (gmb->prev_batt_fcc == 0)
+                return 5042;
+        else
+                return gmb->prev_batt_fcc/10;
+}
+
+static int meter_fg_30_get_battery_cc(void)
+{
+	return -1;
+}
+
+static int meter_fg_30_get_battery_soh(void)
+{
+#ifdef CONFIG_OPLUS_CHARGER_MTK6853
+/* add for soh */
+	if (is_fuelgauge_apply()){
+		/*aging_factor*/
+		return gmb->soh;
+	}
+	else {
+		return -1;
+	}
+#else
+	return -1;
+#endif /*CONFIG_OPLUS_CHARGER_MTK6853*/
+}
+
+#define BATT_CAPACITY	4000
+static int meter_fg_30_get_batt_remaining_capacity(void)
+{
+	pr_err("%s: batt_remaining_capacity value is %d", __func__, gmb->prev_batt_remaining_capacity);
+	if (gmb->prev_batt_remaining_capacity == 0)
+		return 5042;
+	else
+		return gmb->prev_batt_remaining_capacity;
+}
+
+static int meter_fg_30_get_prev_batt_remaining_capacity(void)
+{
+	pr_err("%s: prev_batt_remaining_capacity value is %d", __func__, gmb->prev_batt_remaining_capacity);
+	if (gmb->prev_batt_remaining_capacity == 0)
+		return 5042;
+	else
+		return gmb->prev_batt_remaining_capacity;
+}
+
+static int meter_fg_30_modify_dod0(void)
+{
+	return -1;
+}
+
+static int meter_fg_30_update_soc_smooth_parameter(void)
+{
+	return -1;
+}
+
+void oplus_startup_rm_check_work_handler(struct work_struct *data)
+{
+	static int retry_times = 0;
+
+	if ((gmb->prev_batt_remaining_capacity == 0) && (retry_times++ < RM_CHECK_RETRY_TIMES))
+	{
+		wakeup_fg_algo(gmb, FG_INTR_IAVG);
+		schedule_delayed_work(&gmb->oplus_startup_rm_check_work, RM_CHECK_DELAY_20S);
+	}
+}
+
+/* Add for charger full status of FG 3.0 */
+bool last_full = false;
+
+extern int notify_battery_full(void);
+
+static void meter_fg_30_set_battery_full(bool full)
+{
+	printk("last full = %d, full = %d\n", last_full, full);
+	if(last_full != full) {
+		if (full){
+			if (enable_is_force_full == 1){
+				gmb->is_force_full = 1;
+			}
+			notify_fg_chr_full(gmb);
+		}
+		last_full = full;
+	}
+}
+
+static int fg_read_dts_val(struct mtk_battery *gm, const struct device_node *np,
+			   const char *node_srting, int *param, int unit);
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
+
 
 struct tag_bootmode {
 	u32 size;
@@ -87,6 +493,20 @@ void __attribute__ ((weak))
 {
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+bool __attribute__ ((weak))
+	mtk_bif_is_hw_exist(void)
+{
+	pr_notice_once("%s: do not have bif driver\n", __func__);
+	return false;
+}
+
+int pmic_is_bif_exist(void)
+{
+	return mtk_bif_is_hw_exist();
+}
+#endif
+
 void enable_gauge_irq(struct mtk_gauge *gauge,
 	enum gauge_irq irq)
 {
@@ -129,7 +549,11 @@ struct mtk_battery *get_mtk_battery(void)
 	struct power_supply *psy;
 
 	if (bm == NULL) {
+#ifndef OPLUS_FEATURE_CHG_BASIC
 		psy = power_supply_get_by_name("battery");
+#else
+		psy = power_supply_get_by_name("mtk-battery");
+#endif
 		if (psy == NULL) {
 			pr_debug("[%s] psy is not rdy\n", __func__);
 			return NULL;
@@ -152,7 +576,16 @@ bool is_algo_active(struct mtk_battery *gm)
 
 int fgauge_get_profile_id(struct mtk_battery *gm)
 {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (is_fuelgauge_apply() == true) {
+		 battery_type_check();
+		 return gm->battery_id;
+	} else {
+		return gm->battery_id;
+	}
+#else
 	return gm->battery_id;
+#endif
 }
 
 int get_iavg_gap(struct mtk_battery *gm)
@@ -255,6 +688,20 @@ bool set_charge_power_sel(struct mtk_battery *gm, enum charge_sel select)
 	return 0;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if (defined(CONFIG_OPLUS_CHARGER_MTK6877) || defined(CONFIG_OPLUS_CHARGER_MTK6769R) || defined(CONFIG_OPLUS_CHARGER_MTK6833))
+bool oplus_set_charge_power_sel(int select)
+{
+	if (!gmb) {
+		pr_err("%s: gmb is NULL", __func__);
+		return 0;
+	} else {
+		return set_charge_power_sel(gmb, select);
+	}
+}
+EXPORT_SYMBOL(oplus_set_charge_power_sel);
+#endif
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 int dump_pseudo100(struct mtk_battery *gm, enum charge_sel select)
 {
@@ -609,15 +1056,26 @@ int adc_battemp(struct mtk_battery *gm, int res)
 	struct fg_temp *ptable;
 
 	ptable = gm->tmp_table;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (res >= ptable[0].TemperatureR) {
+		tbatt_value = -400;
+	} else if (res <= ptable[26].TemperatureR) {
+		tbatt_value = 900;
+#else
 	if (res >= ptable[0].TemperatureR) {
 		tbatt_value = -40;
 	} else if (res <= ptable[20].TemperatureR) {
 		tbatt_value = 60;
+#endif
 	} else {
 		res1 = ptable[0].TemperatureR;
 		tmp1 = ptable[0].BatteryTemp;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		for (i = 0; i <= 26; i++) {
+#else
 		for (i = 0; i <= 20; i++) {
+#endif
 			if (res >= ptable[i].TemperatureR) {
 				res2 = ptable[i].TemperatureR;
 				tmp2 = ptable[i].BatteryTemp;
@@ -630,7 +1088,7 @@ int adc_battemp(struct mtk_battery *gm, int res)
 		}
 
 		tbatt_value = (((res - res2) * tmp1) +
-			((res1 - res) * tmp2)) / (res1 - res2);
+			((res1 - res) * tmp2)) * 10 / (res1 - res2);
 	}
 	bm_debug(gm, "[%s] %d %d %d %d %d %d\n",
 		__func__,
@@ -670,9 +1128,9 @@ int volttotemp(struct mtk_battery *gm, int dwVolt, int volt_cali)
 		tres_temp = div_s64(tres_temp, delta_v);
 	}
 
-#if IS_ENABLED(RBAT_PULL_DOWN_R)
+#ifdef RBAT_PULL_DOWN_R
 	tres = (tres_temp * RBAT_PULL_DOWN_R);
-	tres_temp = div_s64(tres, abs(RBAT_PULL_DOWN_R - tres_temp));
+	tres = div_s64(tres, abs(RBAT_PULL_DOWN_R - tres_temp));
 
 #else
 	tres = tres_temp;
@@ -685,6 +1143,123 @@ int volttotemp(struct mtk_battery *gm, int dwVolt, int volt_cali)
 		vbif28, volt_cali);
 	return sbattmp;
 }
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+
+/* only add for 0.1 precision battery temp*/
+int BattThermistorConverTempHighPrecision(struct mtk_battery *gm, int Res);
+int BattThermistorConverTempHighPrecision(struct mtk_battery *gm, int Res)
+{
+	int i = 0;
+	int RES1 = 0, RES2 = 0;
+	int TBatt_Value = DEFAULT_BATT_TEMP_LITTLE_LOW, TMP1 = 0, TMP2 = 0;
+
+	if (Res >= Fg_Temperature_01_Precision_Table[0].TemperatureR) {
+		TBatt_Value = DEFAULT_BATT_TEMP_LOW;
+	} else if (Res <= Fg_Temperature_01_Precision_Table[TABLE_NUM_MAX].TemperatureR) {
+		TBatt_Value = DEFAULT_BATT_TEMP_HIGH;
+	} else {
+		RES1 = Fg_Temperature_01_Precision_Table[0].TemperatureR;
+		TMP1 = Fg_Temperature_01_Precision_Table[0].BatteryTemp;
+
+		for (i = 0; i <= TABLE_NUM_MAX; i++) {
+			if (Res >= Fg_Temperature_01_Precision_Table[i].TemperatureR) {
+				RES2 = Fg_Temperature_01_Precision_Table[i].TemperatureR;
+				TMP2 = Fg_Temperature_01_Precision_Table[i].BatteryTemp;
+				break;
+			}
+			{	/* hidden else */
+				RES1 = Fg_Temperature_01_Precision_Table[i].TemperatureR;
+				TMP1 = Fg_Temperature_01_Precision_Table[i].BatteryTemp;
+			}
+		}
+
+		TBatt_Value = (((Res - RES2) * TMP1) +
+			((RES1 - Res) * TMP2)) / (RES1 - RES2);
+	}
+	bm_trace(gm,
+		"[%s] %d %d %d %d %d %d\n",
+		__func__,
+		RES1, RES2, Res, TMP1,
+		TMP2, TBatt_Value);
+
+	return TBatt_Value;
+}
+
+#define TBAT_MAX_VOL 2000
+#define TBAT_LOW_TEMP -100
+#define TBAT_LITTLE_LOW_TEMP -80
+#define TBAT_VBIF28_BIG 3000
+#define TBAT_VBIF28_SMALL 2500
+int volttotemp_precise(struct mtk_battery *gm, int dwVolt, int volt_cali)
+{
+	long long TRes_temp;
+	long long TRes;
+	int sBaTTMP = TBAT_LOW_TEMP;
+	int vbif28 = gm->rbat.rbat_pull_up_volt;
+	int delta_v;
+
+	if (dwVolt >= TBAT_MAX_VOL)
+		return TBAT_LITTLE_LOW_TEMP;
+
+	TRes_temp = (gm->rbat.rbat_pull_up_r * (long long) dwVolt);
+#ifdef RBAT_PULL_UP_VOLT_BY_BIF
+	vbif28 = pmic_get_vbif28_volt() + volt_cali;
+	delta_v = abs(vbif28 - dwVolt);
+	if (delta_v == 0)
+		delta_v = 1;
+
+#if defined(__LP64__) || defined(_LP64)
+		do_div(TRes_temp, delta_v);
+#else
+		TRes_temp = div_s64(TRes_temp, delta_v);
+#endif
+
+	if (vbif28 > TBAT_VBIF28_BIG || vbif28 < TBAT_VBIF28_SMALL)
+		bm_err(gm,
+			"[RBAT_PULL_UP_VOLT_BY_BIF] vbif28:%d\n",
+			pmic_get_vbif28_volt());
+#else
+	delta_v = abs(gm->rbat.rbat_pull_up_volt - dwVolt);
+	if (delta_v == 0)
+		delta_v = 1;
+#if defined(__LP64__) || defined(_LP64)
+	do_div(TRes_temp, delta_v);
+#else
+	TRes_temp = div_s64(TRes_temp, delta_v);
+#endif
+
+
+#endif
+
+#ifdef RBAT_PULL_DOWN_R
+	TRes = (TRes_temp * RBAT_PULL_DOWN_R);
+
+#if defined(__LP64__) || defined(_LP64)
+		do_div(TRes, abs(RBAT_PULL_DOWN_R - TRes_temp));
+#else
+		TRes_temp = div_s64(TRes, abs(RBAT_PULL_DOWN_R - TRes_temp));
+#endif
+
+#else
+	TRes = TRes_temp;
+#endif
+
+	/* convert register to temperature */
+	if (!pmic_is_bif_exist())
+		sBaTTMP = BattThermistorConverTempHighPrecision(gm, (int)TRes);
+	else
+		sBaTTMP = BattThermistorConverTempHighPrecision(gm, (int)TRes -
+		gm->rbat.bif_ntc_r);
+
+	bm_notice(gm,
+		"[%s] %d %d %d %d\n",
+		__func__,
+		dwVolt, gm->rbat.rbat_pull_up_r,
+		vbif28, volt_cali);
+	return sBaTTMP;
+}
+#endif /*  OPLUS_FEATURE_CHG_BASIC */
 
 int force_get_tbat_internal(struct mtk_battery *gm)
 {
@@ -752,12 +1327,26 @@ int force_get_tbat_internal(struct mtk_battery *gm)
 				/ 10000);
 		}
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* only add for 0.1 precision battery temp*/
+			if (gm->support_ntc_01c_precision) {
+				bat_temperature_val =
+					volttotemp_precise(gm, bat_temperature_volt, vol_cali);
+			} else {
+				bat_temperature_val =
+					volttotemp(gm, bat_temperature_volt, vol_cali);
+			}
+			bm_err(gm, "[force_get_tbat_internal] tbat_precise bat_temperature_val:%d\n",
+				bat_temperature_val);
+#else
 		bat_temperature_val =
 			volttotemp(gm,
 			bat_temperature_volt,
 			vol_cali);
+#endif
 	}
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	bm_notice(gm, "[%s] %d,%d,%d,%d,%d,%d r:%d %d %d\n",
 		__func__,
 		bat_temperature_volt_temp, bat_temperature_volt,
@@ -765,6 +1354,7 @@ int force_get_tbat_internal(struct mtk_battery *gm)
 		fg_r_value, bat_temperature_val,
 		fg_meter_res_value, fg_r_value,
 		gm->no_bat_temp_compensate);
+#endif
 
 	if (gm->pre_bat_temperature_val2 == 0) {
 		gm->pre_bat_temperature_volt_temp =
@@ -789,6 +1379,7 @@ int force_get_tbat_internal(struct mtk_battery *gm)
 			gauge_get_property_control(gm, GAUGE_PROP_BATTERY_CURRENT, &orig_fg_current2, 0);
 			orig_fg_current1 /= 10;
 			orig_fg_current2 /= 10;
+#ifndef OPLUS_FEATURE_CHG_BASIC
 			bm_err(gm,
 				"[%s][err] current:%d,%d,%d,%d,%d,%d pre:%d,%d,%d,%d,%d,%d baton:%d ibat:%d,%d\n",
 				__func__,
@@ -809,6 +1400,7 @@ int force_get_tbat_internal(struct mtk_battery *gm)
 				orig_fg_current2);
 			/*pmic_auxadc_debug(1);*/
 			WARN_ON(1);
+#endif
 		}
 
 		bm_trace(gm,
@@ -835,7 +1427,17 @@ int force_get_tbat_internal(struct mtk_battery *gm)
 		tmp_time = ktime_to_timespec64(dtime);
 	}
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	gm->tbat_precise = bat_temperature_val;
+#if defined(CONFIG_OPLUS_CHARGER_MTK6853) || defined(CONFIG_OPLUS_CHARGER_MTK6833)
+	bat_temperature_high_precision_val = bat_temperature_val;
+#endif
+	if(prj_bat_temp_01c_precision() == true)
+		bat_temperature_high_precision_val = bat_temperature_val;
+	return bat_temperature_val / 10;
+#else /* OPLUS_FEATURE_CHG_BASIC */
 	return bat_temperature_val;
+#endif
 }
 
 int force_get_tbat(struct mtk_battery *gm, bool update)
@@ -844,6 +1446,24 @@ int force_get_tbat(struct mtk_battery *gm, bool update)
 	int prop_map = CONTROL_GAUGE_PROP_BATTERY_TEMPERATURE_ADC;
 	ktime_t ctime = 0, dtime = 0, diff = 0;
 	int bat_temperature_val = 0;
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	int board_temp = 0;
+	if (prj_is_subboard_temp_support()){
+		if (oplus_chg_get_voocphy_support()) {
+			board_temp = oplus_chg_get_subboard_temp_cal()/10;
+			if (prj_for_mtk_60w_support() == true) {
+					bat_temperature_val = force_get_tbat_internal(gm);
+					bm_debug(gm, "[force_get_tbat] real battery temp:%d subboard_temp:%d\n", bat_temperature_val, board_temp);
+			}
+		} else {
+			board_temp = oplus_force_get_subboard_temp()/10;
+		}
+		bm_debug(gm, "[%s] board_temp:%d precise:%d\n", __func__, board_temp, gm->tbat_precise);
+
+		return board_temp;
+	}
+#endif
 
 	prop_control = &gm->prop_control;
 
@@ -880,7 +1500,6 @@ int force_get_tbat(struct mtk_battery *gm, bool update)
 		return gm->cur_bat_temp;
 
 	gm->cur_bat_temp = bat_temperature_val;
-
 	return bat_temperature_val;
 }
 
@@ -1700,6 +2319,10 @@ void fg_custom_init_from_dts(struct platform_device *dev,
 	int r_pseudo100_raw = 0, r_pseudo100_col = 0;
 	int lk_v = 0, lk_i = 0, shuttime = 0;
 	int is_evb_board = 0;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	int dim2_table_distinguish = 0;
+	int support_ntc_01c_precision = 0;
+#endif
 	char node_name[128];
 	struct fuel_gauge_custom_data *fg_cust_data;
 	struct fuel_gauge_table_custom_data *fg_table_cust_data;
@@ -2338,6 +2961,40 @@ void fg_custom_init_from_dts(struct platform_device *dev,
 			);
 	}
 	/* read dtsi from pseudo100 */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	fg_read_dts_val(gm, np, "SUPPORT_NTC_01C_PRECISION",
+		&(support_ntc_01c_precision), 1);
+	gm->support_ntc_01c_precision = support_ntc_01c_precision;
+
+	fg_read_dts_val(gm, np, "DIM2_TABLE_DISTINGUISH",
+		&(dim2_table_distinguish), 1);
+	if (dim2_table_distinguish) {
+		sprintf(node_name, "battery%d_g_FG_charge_PSEUDO100", bat_id);
+		for (i = 0; i < MAX_TABLE; i++) {
+			for (j = 0; j < r_pseudo100_raw; j++) {
+				fg_read_dts_val_by_idx(gm, np, node_name,
+					i*r_pseudo100_raw+j,
+					&(fg_table_cust_data->fg_profile[
+						i].r_pseudo100.pseudo[j+1]),
+						UNIT_TRANS_100);
+			}
+		}
+		bm_err(gm, "battery%d_g_FG_charge_PSEUDO100 g_FG_charge_PSEUDO100_row:%d g_FG_charge_PSEUDO100_col:%d\n",
+			bat_id, r_pseudo100_raw, r_pseudo100_col);
+	} else {
+		for (i = 0; i < MAX_TABLE; i++) {
+			for (j = 0; j < r_pseudo100_raw; j++) {
+				fg_read_dts_val_by_idx(gm, np, "g_FG_charge_PSEUDO100",
+					i*r_pseudo100_raw+j,
+					&(fg_table_cust_data->fg_profile[
+						i].r_pseudo100.pseudo[j+1]),
+						UNIT_TRANS_100);
+			}
+		}
+		bm_err(gm, "g_FG_charge_PSEUDO100_row:%d g_FG_charge_PSEUDO100_col:%d\n",
+			r_pseudo100_raw, r_pseudo100_col);
+	}
+#else
 	for (i = 0; i < MAX_TABLE; i++) {
 		for (j = 0; j < r_pseudo100_raw; j++) {
 			fg_read_dts_val_by_idx(gm, np, "g_FG_charge_PSEUDO100",
@@ -2351,6 +3008,7 @@ void fg_custom_init_from_dts(struct platform_device *dev,
 
 	bm_err(gm, "g_FG_charge_PSEUDO100_row:%d g_FG_charge_PSEUDO100_col:%d\n",
 		r_pseudo100_raw, r_pseudo100_col);
+#endif
 
 	for (i = 0; i < MAX_TABLE; i++) {
 		bm_err(gm, "%6d %6d %6d %6d %6d\n",
@@ -2765,6 +3423,11 @@ static ssize_t bat_sysfs_store(struct device *dev,
 
 	psy = dev_get_drvdata(dev);
 	gm = (struct mtk_battery *)power_supply_get_drvdata(psy);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* oplus add for 806 dump */
+	if (gm == NULL)
+		return -ENODEV;
+#endif
 
 	battery_attr = container_of(attr,
 		struct mtk_battery_sysfs_field_info, attr);
@@ -2785,6 +3448,11 @@ static ssize_t bat_sysfs_show(struct device *dev,
 
 	psy = dev_get_drvdata(dev);
 	gm = (struct mtk_battery *)power_supply_get_drvdata(psy);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* oplus add for 806 dump */
+	if (gm == NULL)
+		return -ENODEV;
+#endif
 
 	battery_attr = container_of(attr,
 		struct mtk_battery_sysfs_field_info, attr);
@@ -3263,6 +3931,625 @@ int fg_check_lk_swocv(struct device *dev,
 	return 0;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+int battery_type_check(void)
+{
+	int index = 0;
+	int barcode_index = 0;
+	struct oplus_optiga_chip *chip = NULL;
+	int value = 0;
+	int ret = 0;
+	int ret_value = 0;
+	int battery_type = BAT_TYPE__UNKNOWN;
+	int batt_id_vol[BATTID_ARR_LEN][BATTID_ARR_WIDTH] = {	{70,150},
+								{70,175},
+								{180,350},
+								{200,350},
+								{550,790},
+								{550,820},
+								{550,1040},
+								{790,1040},
+								{1040,1325},
+								{1131,1314},
+								{1445,1610},
+								{400,820},
+								{70,180},
+								{185,350},
+								{790,1100},
+								{300,520}};
+
+	/* distinguish_batt_with_barcode */
+	if (batt_barcode_read_support) {
+		chip = oplus_get_optiga_info();
+		if (!chip) {
+			printk(KERN_ERR "optiga info null, return!!!\n");
+			return battery_type;
+		}
+
+		index = oplus_get_batt_id_use_barcode();
+		if (index == FIRST_VENDOR) {
+			gmb->battery_id = BATT_ID_0;
+		} else if (index == SECOND_VENDOR) {
+			gmb->battery_id = BATT_ID_1;
+		} else {
+			gmb->battery_id = BATT_ID_0;
+		}
+
+		if (index == UNKNOWN_VENDOR) {
+			battery_type = BAT_TYPE__UNKNOWN;
+			return battery_type;
+		}
+
+		barcode_index = chip->right_barcode_index;
+		if (barcode_index < 0 || barcode_index >= MAX_BARCODE_NUM) {
+			printk(KERN_ERR "barcode index out of count! return !!\n");
+			battery_type = BAT_TYPE__UNKNOWN;
+			return battery_type;
+		}
+
+		if (chip->batt_data[barcode_index].vendor_data.core_vendor == ATL &&
+		    chip->batt_data[barcode_index].vendor_data.module_vendor == NVT &&
+		    chip->batt_data[barcode_index].vendor_data.core_limited_vol == BAT_CORE_LIMITED_VOL_4480) {
+			battery_type = BAT_TYPE__ATL_4480mV_NVT;
+		} else if (chip->batt_data[barcode_index].vendor_data.core_vendor == ATL &&
+		           chip->batt_data[barcode_index].vendor_data.module_vendor == ATL_INDIA &&
+		           chip->batt_data[barcode_index].vendor_data.core_limited_vol == BAT_CORE_LIMITED_VOL_4480) {
+			battery_type = BAT_TYPE__ATL_4480mV_ATLINDIA;
+		} else if (chip->batt_data[barcode_index].vendor_data.core_vendor == GUANYU_C &&
+		           chip->batt_data[barcode_index].vendor_data.module_vendor == GUANYU_M &&
+		           chip->batt_data[barcode_index].vendor_data.core_limited_vol == BAT_CORE_LIMITED_VOL_4480) {
+			battery_type = BAT_TYPE__GUANYU_4480mV_GUANYU;
+		} else if (chip->batt_data[barcode_index].vendor_data.core_vendor == LIWEI &&
+		           chip->batt_data[barcode_index].vendor_data.module_vendor == GUANYU_M &&
+		           chip->batt_data[barcode_index].vendor_data.core_limited_vol == BAT_CORE_LIMITED_VOL_4500) {
+			battery_type = BAT_TYPE__LIWEI_4500mV_GUANYU;
+		} else if (chip->batt_data[barcode_index].vendor_data.core_vendor == LIWEI &&
+		           chip->batt_data[barcode_index].vendor_data.module_vendor == NVT &&
+		           chip->batt_data[barcode_index].vendor_data.core_limited_vol == BAT_CORE_LIMITED_VOL_4500) {
+			battery_type = BAT_TYPE__LIWEI_4500mV_NVT;
+		} else if (chip->batt_data[barcode_index].vendor_data.core_vendor == LIWEI &&
+		           chip->batt_data[barcode_index].vendor_data.module_vendor == NVT_INDIA &&
+		           chip->batt_data[barcode_index].vendor_data.core_limited_vol == BAT_CORE_LIMITED_VOL_4500) {
+			battery_type = BAT_TYPE__LIWEI_4500mV_NVTINDIA;
+		} else if (chip->batt_data[barcode_index].vendor_data.core_vendor == LIWEI &&
+		           chip->batt_data[barcode_index].vendor_data.module_vendor == NVT_INDONESIA &&
+		           chip->batt_data[barcode_index].vendor_data.core_limited_vol == BAT_CORE_LIMITED_VOL_4500) {
+			battery_type = BAT_TYPE__LIWEI_4500mV_NVTINDONESIA;
+		} else {
+			battery_type = BAT_TYPE__UNKNOWN;
+		}
+
+		return battery_type;
+	}
+
+	#ifdef CONFIG_MTK_AUXADC
+	int channel = BAT_ID;
+	int data[BATTID_CHECK_DATA_NUM] = {0};
+	int i = 0;
+	int times = BATTID_CHECK_TIME;
+
+	if (IMM_IsAdcInitReady() == 0) {
+		printk(KERN_ERR "[battery_type_check]: AUXADC is not ready\n");
+		return 0;
+	}
+	 i = times;
+	 while (i--) {
+	 	printk("IMM_GetOneChannelValue start\n");
+		ret = IMM_GetOneChannelValue(channel, data, &ret_value);
+ 		printk(KERN_ERR "[battery_type_check]: ret = %d,ret_value[%d]\n", ret,ret_value);
+		if (ret == 0) {
+			value += ret_value;
+		} else {
+			 times = times > 1 ? times - 1 : 1;
+			 printk(KERN_ERR "[battery_type_check]: ret[%d], times[%d]\n", ret, times);
+		 }
+	 }
+	value = value / times;
+	#else
+		if (use_mt6360) {
+#ifdef CONFIG_MT6360_PMIC
+			ret = mt6360_get_batid_volt(&value);
+#endif
+			if (ret < 0) {
+				bm_debug(gmb, "[battery_type_check] mt6360 read batid err = %d,\n", ret);
+			}
+			value = value/ADC_VOL_PRO;
+		} else {
+			if (batt_id == NULL) {
+				bm_debug(gmb, "[battery_type_check]: batt_id is null\n");
+				gmb->battery_id = BATT_ID_0;
+				return BAT_TYPE__ATL_4400mV;
+			}
+			if (!is_kthread_get_adc()) {
+				ret = iio_read_channel_processed(batt_id, &ret_value);
+			}
+			else {
+				ret_value = get_batt_id_ntc_volt();
+			}
+			if (ret < 0) {
+				bm_debug(gmb, "[battery_type_check] read channel err = %d,\n", ret);
+			}
+			bm_debug(gmb, "[battery_type_check]: ret = %d,ret_value[%d]\n", ret,ret_value);
+			value = ret_value;
+		}
+	#endif
+	bm_debug(gmb, "[battery_value= %d\n", value);
+	if(is_fuelgauge_apply() == true){
+	#ifdef CONFIG_OPLUS_CHARGER_MTK6853
+		if (value >= batt_id_vol[0][0] && value <=batt_id_vol[0][1]) {
+			battery_type = BAT_TYPE__LIW_4450mV;
+			gmb->battery_id = BATT_ID_0;
+		} else if (value >= batt_id_vol[3][0] && value <= batt_id_vol[3][1]) {
+			battery_type = BAT_TYPE__COS_4450mV;
+			gmb->battery_id = BATT_ID_1;
+		} else if (value >= batt_id_vol[4][0] && value < batt_id_vol[4][1]) {
+			battery_type = BAT_TYPE__ATL_4450mV;
+			gmb->battery_id = BATT_ID_2;
+		} else if (value >= batt_id_vol[8][0] && value < batt_id_vol[8][1]) {
+			battery_type = BAT_TYPE__SDI_4450mV;
+			gmb->battery_id = BATT_ID_3;
+		} else if (get_PCB_Version() <= 4) {
+			if (value >= batt_id_vol[6][0] && value <= batt_id_vol[6][1]) {
+				battery_type = BAT_TYPE__ATL_4400mV;
+				gmb->battery_id = BATT_ID_0;
+			}
+		} else if (get_PCB_Version() > 4) {
+			if (value >= batt_id_vol[7][0] && value <= batt_id_vol[7][1]) {
+				battery_type = BAT_TYPE__ATL_4400mV;
+				gmb->battery_id = BATT_ID_0;
+			}
+		}
+	#elif defined CONFIG_OPLUS_CHARGER_MTK6877
+		if (use_mt6360) {
+			if (value >= batt_id_vol[10][0] && value <= batt_id_vol[10][1]) {
+				battery_type = BAT_TYPE__ATL_4450mV;
+				gmb->battery_id = BATT_ID_0;
+			} else if (value >= batt_id_vol[9][0] && value <= batt_id_vol[9][1]) {
+				battery_type = BAT_TYPE__COS_4450mV;
+				gmb->battery_id = BATT_ID_1;
+			} else {
+				battery_type = BAT_TYPE__UNKNOWN;
+			}
+		} else if (value >= batt_id_vol[0][0] && value <= batt_id_vol[0][1]) {
+			battery_type = BAT_TYPE__LIW_4450mV;
+			gmb->battery_id = BATT_ID_0;
+		} else if (value >= batt_id_vol[3][0] && value <= batt_id_vol[3][1]) {
+			battery_type = BAT_TYPE__COS_4450mV;
+			gmb->battery_id = BATT_ID_1;
+		} else if (value >= batt_id_vol[11][0] && value <= batt_id_vol[11][1]) {
+			battery_type = BAT_TYPE__ATL_4450mV;
+			gmb->battery_id = BATT_ID_2;
+		}
+	#elif defined CONFIG_OPLUS_CHARGER_MTK6833
+		struct device_node *node = NULL;
+		bool chg_batt_id_supported_project = false;
+		node = of_find_compatible_node(NULL, NULL, "mediatek,charger");
+		chg_batt_id_supported_project = of_property_read_bool(node, "chg_batt_id_supported_project");
+		if (true == chg_batt_id_supported_project) {
+			if (value >= batt_id_vol[12][0] && value < batt_id_vol[12][1]) {
+				battery_type = BAT_TYPE__LIW_4450mV;
+				gmb->battery_id = BATT_ID_1;
+			} else if (value >= batt_id_vol[2][0] && value <= batt_id_vol[2][1]) {
+				battery_type = BAT_TYPE__COS_4450mV;
+				gmb->battery_id = BATT_ID_2;
+			} else if (value >= batt_id_vol[4][0] && value < batt_id_vol[4][1]) {
+				battery_type = BAT_TYPE__ATL_4450mV;
+				gmb->battery_id = BATT_ID_3;
+			} else if (value >= batt_id_vol[8][0] && value < batt_id_vol[8][1]) {
+				battery_type = BAT_TYPE__SDI_4450mV;
+				gmb->battery_id = BATT_ID_4;
+			}
+		} else if (get_project() == 21037 || get_project() == 21041 ||
+				get_project()== 20015 || get_project()== 20016 ||
+				get_project()== 20108 || get_project()== 20109 ||
+				get_project()== 20307) {
+			if (value >= batt_id_vol[0][0] && value <=batt_id_vol[0][1]) {
+				battery_type = BAT_TYPE__LIW_4450mV;
+				gmb->battery_id = BATT_ID_0;
+			} else if(value >= batt_id_vol[3][0] && value <= batt_id_vol[3][1]) {
+				battery_type = BAT_TYPE__COS_4450mV;
+				gmb->battery_id = BATT_ID_1;
+			}
+			if(get_project()== 20015 || get_project()== 20016 ||
+				get_project()== 20108 || get_project()== 20109 ||
+				get_project()== 20307 || get_project()== 20013) {
+				if(value >= batt_id_vol[5][0] && value <= batt_id_vol[5][1]) {
+					battery_type = BAT_TYPE__ATL_4450mV;
+					gmb->battery_id = BATT_ID_2;
+				}
+			}
+		} else if (get_project() == 21102) {
+			if (value >= batt_id_vol[12][0] && value < batt_id_vol[12][1]) {
+				battery_type = BAT_TYPE__LIW_4450mV;
+				gmb->battery_id = BATT_ID_0;
+			} else if (value > batt_id_vol[2][0] && value <= batt_id_vol[2][1]) {
+				battery_type = BAT_TYPE__COS_4450mV;
+				gmb->battery_id = BATT_ID_1;
+			}
+		} else if (get_project() == 22084) {
+			if (value >= batt_id_vol[12][0] && value < batt_id_vol[12][1]) {
+				battery_type = BAT_TYPE__LIW_4450mV;
+				gmb->battery_id = BATT_ID_0;
+			} else if (value >= batt_id_vol[4][0] && value <= batt_id_vol[4][1]) {
+				battery_type = BAT_TYPE__ATL_4450mV;
+				gmb->battery_id = BATT_ID_1;
+			}
+		} else if (get_project() == 23053 || get_project() == 23054 || get_project() == 23055) {
+			if (value >= batt_id_vol[12][0] && value < batt_id_vol[12][1]) {
+				battery_type = BAT_TYPE__LIW_4450mV;
+				gmb->battery_id = BATT_ID_0;
+			} else if (value >= batt_id_vol[3][0] && value <= batt_id_vol[3][1]) {
+				battery_type = BAT_TYPE__COS_4450mV;
+				gmb->battery_id = BATT_ID_1;
+			}
+		}else if (get_project() == 23253) {
+			if (value >= batt_id_vol[4][0] && value < batt_id_vol[4][1]) {
+				battery_type = BAT_TYPE__ATL_4450mV;
+				gmb->battery_id = BATT_ID_0;
+			}
+		}else if (get_project()== 22610 || get_project()== 22705 ||
+				get_project()== 22706) {
+				if((value >= batt_id_vol[0][0] && value <= batt_id_vol[0][1]) ||
+					(value >= batt_id_vol[2][0] && value <= batt_id_vol[2][1])) {
+					battery_type = BAT_TYPE__COS_4450mV;
+					gmb->battery_id = BATT_ID_0;
+				} else if (value >= batt_id_vol[4][0] && value <= batt_id_vol[4][1]) {
+					battery_type = BAT_TYPE__ATL_4450mV;
+					gmb->battery_id = BATT_ID_1;
+				}
+		} else if (value >= batt_id_vol[2][0] && value <= batt_id_vol[2][1]) {
+			battery_type = BAT_TYPE__COS_4450mV;
+			gmb->battery_id = BATT_ID_1;
+		} else if (value >= batt_id_vol[4][0] && value <= batt_id_vol[4][1]) {
+			battery_type = BAT_TYPE__ATL_4450mV;
+			gmb->battery_id = BATT_ID_0;
+		}
+	#elif defined CONFIG_OPLUS_CHARGER_MTK6781
+		if (odm_select_bat_ntc_support == ODM_SPACE_B_33W) {/*33w*/
+			if (value >= batt_id_vol[4][0] && value <= batt_id_vol[4][1]) {//2nd  ATL  68K  0.55-0.79V  0.68
+					battery_type = BAT_TYPE__ATL_4450mV;
+					gmb->battery_id = 3;
+			 }else {
+					battery_type = BAT_TYPE__UNKNOWN;
+					gmb->battery_id = 5;
+			}
+		} else if (odm_select_bat_ntc_support == ODM_SPACE_D_18W){/*18w*/
+			if (value >= batt_id_vol[13][0] && value <= batt_id_vol[13][1]) {//1st COS 15K 0.185-0.35V   0.28-0.29V
+					battery_type = BAT_TYPE__COS_4450mV;
+					gmb->battery_id = 2;
+			} else if (value >= batt_id_vol[1][0] && value <= batt_id_vol[1][1]) { //2nd LIW 1K  0.07-0.175V   0.1V
+					battery_type = BAT_TYPE__LIW_4450mV;
+					gmb->battery_id = 1;
+				}
+			else if (value >= batt_id_vol[4][0] && value <= batt_id_vol[4][1]) { //3rd ALT 68K  0.55-0.79V   0.68V
+					battery_type = BAT_TYPE__ATL_4450mV;
+					gmb->battery_id = 0;
+				}
+			else {
+					battery_type = BAT_TYPE__UNKNOWN;
+					gmb->battery_id = 5;
+			}
+		}
+	#else
+		struct device_node *node = NULL;
+		bool chg_battery_id = false;
+		bool chg_batt_id_supported_project = false;
+		int i = 0;
+		node = of_find_compatible_node(NULL, NULL, "mediatek,charger");
+		chg_battery_id = of_property_read_bool(node, "chg_battery_id");
+		chg_batt_id_supported_project = of_property_read_bool(node, "chg_batt_id_supported_project");
+		if (true == chg_battery_id) {
+			if (true == chg_batt_id_supported_project) {
+				if (value >= batt_id_vol[4][0] && value <= batt_id_vol[4][1]) { /* 2nd  ATL  68K  0.55-0.79V  0.68 */
+					battery_type = BAT_TYPE__ATL_4450mV;
+					gmb->battery_id = BATT_ID_3;
+				} else if (value >= batt_id_vol[13][0] && value <= batt_id_vol[13][1]) { /* 1st COS 15K 0.185-0.35V   0.28-0.29V */
+					battery_type = BAT_TYPE__COS_4450mV;
+					gmb->battery_id = BATT_ID_2;
+				} else if (value >= batt_id_vol[1][0] && value <= batt_id_vol[1][1]) { /* 2nd LIW 1K  0.07-0.175V   0.1V */
+					battery_type = BAT_TYPE__LIW_4450mV;
+					gmb->battery_id = BATT_ID_1;
+				} else {
+					battery_type = BAT_TYPE__UNKNOWN;
+					gmb->battery_id = BATT_ID_0;
+				}
+			} else {
+				int length = of_property_count_elems_of_size(node, "batid_voltage_range", sizeof(u32));
+				printk(KERN_ERR "batid_voltage_range length = %d\n", length);
+				if (length > 0) {
+					u32 batid_voltage_range[BATTID_ARR_LEN][BATTID_ARR_WIDTH+1] = {0};
+					ret = of_property_read_u32_array(node, "batid_voltage_range",
+										&batid_voltage_range[0][0],
+										length);
+					for (i = 0; i < BATTID_ARR_LEN; i++) {
+						if (value >= batid_voltage_range[i][0] && value <= batid_voltage_range[i][1]) {
+							gmb->battery_id = i+1;
+							battery_type = batid_voltage_range[i][2];
+							break;
+						}
+					}
+					printk(KERN_ERR " battery_id = %d(%d), battery_type = %d\n", gmb->battery_id, value, battery_type);
+				} else {
+					if (value >= batt_id_vol[12][0] && value < batt_id_vol[12][1]) {
+						battery_type = BAT_TYPE__LIW_4450mV;
+						gmb->battery_id = BATT_ID_1;
+					} else if (value >= batt_id_vol[4][0] && value <= batt_id_vol[4][1]) {
+						battery_type = BAT_TYPE__ATL_4450mV;
+						gmb->battery_id = BATT_ID_0;
+					}
+				}
+			}
+		} else if (use_mt6370) {
+			if (value >=  batt_id_vol[13][0] && value <= batt_id_vol[13][1]) {
+				battery_type = BAT_TYPE__COS_4450mV;
+				gmb->battery_id = BATT_ID_2;
+			} else if (value >= batt_id_vol[1][0] && value <= batt_id_vol[1][1]) {
+				battery_type = BAT_TYPE__LIW_4450mV;
+				gmb->battery_id = BATT_ID_1;
+			} else if (value > batt_id_vol[4][0] && value <= batt_id_vol[4][1]) {
+				battery_type = BAT_TYPE__ATL_4450mV;
+				gmb->battery_id = BATT_ID_0;
+			}
+		} else if (value >= batt_id_vol[14][0] && value <= batt_id_vol[14][1]) {
+			battery_type = BAT_TYPE__ATL_4400mV;
+			gmb->battery_id = BATT_ID_0;
+		} else if (value >= batt_id_vol[15][0] && value <= batt_id_vol[15][1]) {
+			battery_type = BAT_TYPE__SDI_4400mV;
+			gmb->battery_id = BATT_ID_1;
+		}
+	#endif
+		else {
+			battery_type = BAT_TYPE__UNKNOWN;
+		}
+	}
+	else {
+			battery_type = BAT_TYPE__UNKNOWN;
+			gmb->battery_id = BATT_ID_0;
+	}
+
+	printk(KERN_ERR "[battery_type_check]: adc_value[%d], battery_type[%d],g_fg_battery_id[%d]\n", value, battery_type, gmb->battery_id);
+	return battery_type;
+}
+
+int battery_get_flashlight_temperature(int *temp)
+{
+	int ret = 0;
+	int ret_value = 0;
+
+	if (flash_ntc_id == NULL) {
+		return -1;
+	}
+	ret = iio_read_channel_processed(flash_ntc_id, &ret_value);
+	if (ret < 0) {
+		printk(KERN_ERR "read channel err = %d,\n", ret);
+		return ret;
+	}
+	*temp = ret_value;
+
+	return 0;
+}
+EXPORT_SYMBOL(battery_get_flashlight_temperature);
+
+static  __attribute__((unused)) bool battery_type_is_4450mv(void)
+{
+	int battery_type = BAT_TYPE__UNKNOWN;
+	bool retry_flag = false;
+try_again:
+	battery_type = battery_type_check();
+	if (battery_type == BAT_TYPE__ATL_4450mV
+		|| battery_type == BAT_TYPE__COS_4450mV
+		|| battery_type == BAT_TYPE__LIW_4450mV
+		|| battery_type == BAT_TYPE__SDI_4450mV
+		|| battery_type == BAT_TYPE__GUANYU_4480mV_GUANYU) {
+		return true;
+	} else {
+		/*if (get_project() == 20391 && get_PCB_Version() <= PCB_VERSION_EVT1) {
+			return true;
+		}*/
+		if (prj_for_mtk_60w_support() == true) {
+			return true;
+		}
+		if (retry_flag == false) {
+			retry_flag = true;
+			goto try_again;
+		}
+		/*if (is_meta_mode() == true) {
+			return false;
+		} else {
+			return false;
+		}*/
+		return false;
+	}
+}
+
+static  __attribute__((unused)) bool battery_type_is_4400mv(void)
+{
+	int battery_type = BAT_TYPE__UNKNOWN;
+	bool retry_flag = false;
+try_again:
+	battery_type = battery_type_check();
+	if (use_mt6360) {
+		if (battery_type == BAT_TYPE__ATL_4450mV || battery_type == BAT_TYPE__COS_4450mV) {
+			return true;
+		} else {
+			if (retry_flag == false) {
+				retry_flag = true;
+				goto try_again;
+			}
+			/*if (is_meta_mode() == true) {
+				return false;
+			} else {
+				return false;
+			}*/
+		}
+	} else if (battery_type == BAT_TYPE__SDI_4400mV || battery_type == BAT_TYPE__ATL_4400mV) {
+		return true;
+	} else {
+		if (retry_flag == false) {
+			retry_flag = true;
+			goto try_again;
+		}
+		/*if (is_meta_mode() == true) {
+			return false;
+		} else {
+			return false;
+		}*/
+	}
+	return true;
+}
+
+bool meter_fg_30_get_battery_authenticate(void)
+{
+	int temp;
+	if (external_authenticate_support) {
+		temp = force_get_tbat(gmb, true);
+		bm_err(gmb, "%s temp=%d removed_bat_decidegc=%d\n", __func__, temp, removed_bat_decidegc/10);
+		if (temp <= removed_bat_decidegc/10)
+			return false;
+		else
+			return true;
+	}
+
+	if(prj_is_4450mv_battery_support() == true) {
+		return battery_type_is_4450mv();
+	} else {
+		return battery_type_is_4400mv();
+	}
+}
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static void register_battery_devinfo(void)
+{
+	int ret = 0;
+	char *version;
+	char *manufacture;
+	switch (battery_type_check()) {
+		case BAT_TYPE__SDI_4350mV:
+			version = "4.35v";
+			manufacture = "SDI";
+			break;
+		case BAT_TYPE__SDI_4400mV:
+			version = "4.40v";
+			manufacture = "SDI";
+			break;
+		case BAT_TYPE__LG_4350mV:
+			version = "4.35v";
+			manufacture = "LG";
+			break;
+		case BAT_TYPE__LG_4400mV:
+			version = "4.40v";
+			manufacture = "LG";
+			break;
+		case BAT_TYPE__ATL_4350mV:
+			version = "4.35v";
+			manufacture = "ATL";
+			break;
+		case BAT_TYPE__ATL_4400mV:
+			version = "4.40v";
+			manufacture = "ATL";
+			break;
+		case BAT_TYPE__COS_4450mV:
+			version = "4.45v";
+			manufacture = "COS";
+			break;
+		case BAT_TYPE__LIW_4450mV:
+			version = "4.45v";
+			manufacture = "LIW";
+			break;
+/* add for 4.45V battery*/
+		case BAT_TYPE__ATL_4450mV:
+			version = "4.45v";
+			manufacture = "ATL";
+			break;
+		case BAT_TYPE__SDI_4450mV:
+			version = "4.45v";
+			manufacture = "SDI";
+			break;
+		/* distingush using battery barcode */
+		case BAT_TYPE__ATL_4480mV_NVT:
+			version = "4.48v";
+			manufacture = "ATL";
+			break;
+		case BAT_TYPE__ATL_4480mV_ATLINDIA:
+			version = "4.48v";
+			manufacture = "ATL PACKAGE IN INDIA";
+			break;
+		case BAT_TYPE__GUANYU_4480mV_GUANYU:
+			version = "4.48v";
+			manufacture = "GUANYU";
+			break;
+		case BAT_TYPE__LIWEI_4500mV_GUANYU:
+			version = "4.50v";
+			manufacture = "GUANYU";
+			break;
+		case BAT_TYPE__LIWEI_4500mV_NVT:
+			version = "4.50v";
+			manufacture = "NVT";
+			break;
+		case BAT_TYPE__LIWEI_4500mV_NVTINDIA:
+			version = "4.50v";
+			manufacture = "NVT_INDIA";
+			break;
+		case BAT_TYPE__LIWEI_4500mV_NVTINDONESIA:
+			version = "4.50v";
+			manufacture = "NVT_INDONESIA";
+			break;
+		default:
+			version = "unknown";
+			manufacture = "UNKNOWN";
+			break;
+	}
+
+	ret = register_device_proc("battery", version, manufacture);
+	if (ret)
+		pr_err("register_battery_devinfo fail\n");
+}
+#endif  /*OPLUS_FEATURE_CHG_BASIC*/
+
+static bool meter_set_gauge_power_sel(int sel)
+{
+        enum charge_sel chgsel = CHARGE_NORMAL;
+
+        if ((sel >= CHARGE_NORMAL) && (sel <= CHARGE_R4))
+                chgsel = (enum charge_sel)sel;
+        return set_charge_power_sel(gmb, chgsel);
+}
+
+static struct oplus_gauge_operations battery_meter_fg_30_gauge = {
+	.get_battery_mvolts			= meter_fg_30_get_battery_mvolts,
+	.get_battery_temperature		= meter_fg_30_get_battery_temperature,
+	.get_batt_remaining_capacity		= meter_fg_30_get_batt_remaining_capacity,
+	.get_battery_soc			= meter_fg_30_get_battery_soc,
+	.get_average_current			= meter_fg_30_get_average_current,
+	.get_prev_batt_fcc                  	= meter_fg_30_get_prev_battery_fcc,
+	.get_battery_fcc			= meter_fg_30_get_battery_fcc,
+	.get_battery_cc				= meter_fg_30_get_battery_cc,
+	.get_battery_soh			= meter_fg_30_get_battery_soh,
+	.get_battery_authenticate		= meter_fg_30_get_battery_authenticate,
+	.set_battery_full			= meter_fg_30_set_battery_full,
+	.get_prev_battery_mvolts		= meter_fg_30_get_battery_mvolts,
+	.get_prev_battery_temperature		= meter_fg_30_get_battery_temperature,
+	.get_prev_battery_soc			= meter_fg_30_get_battery_soc,
+	.get_prev_average_current		= meter_fg_30_get_average_current,
+	.get_prev_batt_remaining_capacity	= meter_fg_30_get_prev_batt_remaining_capacity,
+	.get_battery_mvolts_2cell_max		= meter_fg_30_get_battery_mvolts,
+	.get_battery_mvolts_2cell_min		= meter_fg_30_get_battery_mvolts,
+	.get_prev_battery_mvolts_2cell_max	= meter_fg_30_get_battery_mvolts,
+	.get_prev_battery_mvolts_2cell_min	= meter_fg_30_get_battery_mvolts,
+	.update_battery_dod0			= meter_fg_30_modify_dod0,
+	.update_soc_smooth_parameter		= meter_fg_30_update_soc_smooth_parameter,
+	.set_gauge_power_sel			= meter_set_gauge_power_sel,
+};
+
+bool is_battery_init_done(void)
+{
+	if (!gmb)
+		return false;
+	else
+		return gmb->is_probe_done;
+}
+#endif  /* OPLUS_FEATURE_CHG_BASIC */
+
 int fg_prop_control_init(struct mtk_battery *gm)
 {
 	struct property_control	*prop_control;
@@ -3292,6 +4579,12 @@ int battery_init(struct platform_device *pdev)
 	bool b_recovery_mode = 0;
 	struct mtk_battery *gm;
 	struct mtk_gauge *gauge;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* BSP.CHG.basic, 2021/12/25, Add for charger */
+	struct oplus_gauge_chip *chip = NULL;
+	struct device_node *node;
+	int removed_bat_decidegc = 0;
+#endif
 
 	gauge = dev_get_drvdata(&pdev->dev);
 	gm = gauge->gm;
@@ -3301,6 +4594,61 @@ int battery_init(struct platform_device *pdev)
 	gm->sw_iavg_gap = 3000;
 	gm->in_sleep = false;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "BAT_TEMP_01C_PRECISION", &(bat_temp_01c_precision), 1);
+	printk("%s, bat_temp_01c_precision:%d\n", __func__, bat_temp_01c_precision);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "FUELGAGUE_APPLY", &(fuelgauge_apply), 1);
+	printk("%s, fuelgauge_apply:%d\n", __func__, fuelgauge_apply);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "IS_GET_TBAT_SUPPORT", &(is_get_tbat_support), 1);
+	printk("%s, is_get_tbat_support:%d\n", __func__, is_get_tbat_support);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "FOR_MTK_60W_SUPPORT", &(for_mtk_60w_support), 1);
+	printk("%s, for_mtk_60w_support:%d\n", __func__, for_mtk_60w_support);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "USE_MT6768", &(use_mt6768), 1);
+	printk("%s, use_mt6768:%d\n", __func__, use_mt6768);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "IS_4450MV_BATTERY_SUPPORT", &(is_4450mv_battery_support), 1);
+	printk("%s, is_4450mv_battery_support:%d\n", __func__, is_4450mv_battery_support);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "ENABLE_IS_FORCE_FULL", &(enable_is_force_full), 1);
+	printk("%s, enable_is_force_full:%d\n", __func__, enable_is_force_full);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "IS_SUBBOARD_TEMP_SUPPORT", &(is_subboard_temp_support), 1);
+	printk("%s, is_subboard_temp_support:%d\n", __func__, is_subboard_temp_support);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "USE_MT6360", &(use_mt6360), 1);
+	printk("%s, use_mt6360:%d\n", __func__, use_mt6360);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "USE_MT6370", &(use_mt6370), 1);
+	printk("%s, use_mt6370:%d\n", __func__, use_mt6370);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "ODM_SELECT_BAT_NTC_SUPPORT", &(odm_select_bat_ntc_support), 1);
+	printk("%s, odm_select_bat_ntc_support:%d\n", __func__, odm_select_bat_ntc_support);
+
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "AUTHENTICATE_IC_READ_BATT_BARCODE_SUPPORT",
+	                &(batt_barcode_read_support), 1);
+	printk("%s, batt_barcode_read_support:%d\n", __func__, batt_barcode_read_support);
+	fg_read_dts_val(gauge->gm, pdev->dev.of_node, "EXTERNAL_AUTHENTICATE", &(external_authenticate_support), 1);
+	printk("%s, external_authenticate_support:%d\n", __func__, external_authenticate_support);
+
+	node = of_find_node_by_name(NULL, "charger");
+	if (node) {
+		ret = fg_read_dts_val(gauge->gm, node, "qcom,removed_bat_decidegc", &(removed_bat_decidegc), 1);
+		if (ret < 0)
+			removed_bat_decidegc = REMOVED_BATT_TEMP;
+		else
+			removed_bat_decidegc = -removed_bat_decidegc;
+		printk("%s, removed_bat_decidegc:%d\n", __func__, removed_bat_decidegc);
+	} else {
+		printk("%s, failed to find charger device node\n", __func__);
+	}
+	gmb = gm;
+#if (defined(CONFIG_OPLUS_CHARGER_MTK6877) || defined(CONFIG_OPLUS_CHARGER_MTK6769R) || defined(CONFIG_OPLUS_CHARGER_MTK6833))
+	register_mtk_oplus_batt_interfaces(&mtk_oplus_batt_intf);
+#endif
+#endif /* OPLUS_FEATURE_CHG_BASIC */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if(is_fuelgauge_apply() == true) {
+		batt_id = devm_iio_channel_get(&pdev->dev, "auxadc6-batt_id_v");
+		if (IS_ERR(batt_id)){
+			bm_err(gm, "%s battery ID CHANNEL ERR \n", __func__);
+			batt_id = NULL;
+		}
+	}
+#endif
 	mutex_init(&gm->fg_update_lock);
 
 	init_waitqueue_head(&gm->wait_que);
@@ -3322,8 +4670,6 @@ int battery_init(struct platform_device *pdev)
 	gm->uisoc_plus.callback = fg_bat_int2_h_handler;
 	gauge_coulomb_consumer_init(&gm->uisoc_minus, &pdev->dev, "uisoc-1%");
 	gm->uisoc_minus.callback = fg_bat_int2_l_handler;
-
-
 
 	alarm_init(&gm->tracking_timer, ALARM_BOOTTIME,
 		tracking_timer_callback);
@@ -3362,6 +4708,59 @@ int battery_init(struct platform_device *pdev)
 		battery_algo_init(gm);
 		bm_err(gm, "[%s]: enable Kernel mode Gauge\n", __func__);
 	}
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	/* distinguish_batt_with_barcode
+	 * if oplus_optiga driver is not ready, return -EPROBE_DEFER.
+	 */
+	if (batt_barcode_read_support) {
+		if ((false == oplus_optiga_get_init_done()) &&
+		    (reprobe_cnt <= MAX_REPROBE_CNT)) {
+			reprobe_cnt++;
+			printk(KERN_ERR "optiga get_batt_id is not ready. reprobe cnt:%d\n",
+			       reprobe_cnt);
+			return -EPROBE_DEFER;
+		} else {
+			printk(KERN_ERR "optiga get_batt_id is ready OR out of count.\n");
+		}
+	}
+
+	if(is_fuelgauge_apply() == true) {
+		chip = (struct oplus_gauge_chip*) kzalloc(sizeof(struct oplus_gauge_chip),
+					GFP_KERNEL);
+		if (!chip) {
+			printk("oplus_gauge_chip devm_kzalloc failed.\n");
+			return -ENOMEM;
+		}
+	}
+	if(is_fuelgauge_apply() == true) {
+		chip->gauge_ops = &battery_meter_fg_30_gauge;
+		oplus_gauge_init(chip);
+	}
+
+	if(is_fuelgauge_apply() == true) {
+		batt_id = iio_channel_get(&pdev->dev, "auxadc6-batt_id_v");
+		if (IS_ERR(batt_id)){
+			bm_err(gm, "battery ID CHANNEL ERR \n");
+			batt_id = NULL;
+		}
+
+		register_battery_devinfo();
+		bm_err(gm, "register_battery_devinfo success\n");
+	} else {
+		printk("20075 flash ntc\n");
+		flash_ntc_id = iio_channel_get(&pdev->dev, "auxadc6-batt_id_v");
+		if (IS_ERR(flash_ntc_id)){
+			bm_err(gm, "flash ntc CHANNEL ERR \n");
+			flash_ntc_id = NULL;
+		}
+		/*add end*/
+	}
+
+	INIT_DELAYED_WORK(&gauge->gm->oplus_startup_rm_check_work, oplus_startup_rm_check_work_handler);
+	schedule_delayed_work(&gauge->gm->oplus_startup_rm_check_work, RM_CHECK_DELAY_20S);
+	pr_err("battery_init successful..!!");
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 	return 0;
 }

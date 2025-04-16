@@ -11,8 +11,11 @@
 
 /* Must be the same as item number in region_sizes[], which in
  * /vendor/mediatek/proprietary/hardware/gralloc_extra/ge_misc.cpp
+ * If the video fg function fails, please check whether the value matches first.
+ * error case: ged_ge_get: vendor don't support region id: 2x
+ * Modify the value to match the file(ge_misc.cpp) structure size to support dimming extension
  */
-#define GE_ALLOC_STRUCT_NUM 22
+#define GE_ALLOC_STRUCT_NUM 23
 #define GE_MAX_REGION_SIZE 8192
 
 GED_ERROR ged_ge_init(void);

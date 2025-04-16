@@ -108,6 +108,11 @@ struct notify_dev dptx_notify_data;
 struct class *switch_class;
 static atomic_t device_count;
 
+#ifdef OPLUS_FEATURE_DISPLAY
+static bool oplus_dp_ctrl_gpio_support;
+static int oplus_dp_ctrl_gpio;
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 static ssize_t state_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -3461,6 +3466,8 @@ int mtk_drm_dp_get_info(struct drm_device *dev,
 
 void mtk_dp_get_dsc_capability(u8 *dsc_cap)
 {
+	return;
+
 	if (g_mtk_dp == NULL) {
 		DPTXMSG("%s: dp not initial\n", __func__);
 		return;
@@ -4318,7 +4325,25 @@ void mtk_dp_SWInterruptSet(int bstatus)
 		return;
 	}
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_dp_ctrl_gpio_support && gpio_is_valid(oplus_dp_ctrl_gpio)) {
+		if (bstatus == HPD_CONNECT) {
+			gpio_direction_output(oplus_dp_ctrl_gpio, 1);
+			DPTXMSG("HPD_CONNECT set oplus-dp-ctrl-gpio to pull up\n");
+		}
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	mtk_dp_HPDInterruptSet(bstatus);
+
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (oplus_dp_ctrl_gpio_support && gpio_is_valid(oplus_dp_ctrl_gpio)) {
+		if (bstatus == HPD_DISCONNECT) {
+			gpio_direction_output(oplus_dp_ctrl_gpio, 0);
+			DPTXMSG("HPD_DISCONNECT set oplus-dp-ctrl-gpio to pull down\n");
+		}
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	mutex_unlock(&dp_lock);
 }
@@ -4524,6 +4549,29 @@ static int mtk_drm_dp_probe(struct platform_device *pdev)
 
 	mtk_dp_vsvoter_clr(mtk_dp);
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	oplus_dp_ctrl_gpio_support = false;
+	oplus_dp_ctrl_gpio = -1;
+	oplus_dp_ctrl_gpio_support = device_property_read_bool(dev, "oplus-dp-ctrl-gpio-support");
+	if (oplus_dp_ctrl_gpio_support) {
+		oplus_dp_ctrl_gpio = of_get_named_gpio(dev->of_node, "oplus-dp-ctrl-gpio", 0);
+		if (!gpio_is_valid(oplus_dp_ctrl_gpio)) {
+			oplus_dp_ctrl_gpio = -1;
+			DPTXERR("read oplus-dp-ctrl-gpio property fail and set invalid gpio num -1\n");
+		} else {
+			DPTXMSG("get oplus-dp-ctrl-gpio success is %d\n", oplus_dp_ctrl_gpio);
+			ret = gpio_request(oplus_dp_ctrl_gpio, NULL); /* probe oplus-dp-ctrl-gpio */
+			if (ret) {
+				DPTXERR("Failed to request oplus-dp-ctrl-gpio. ret = %d\n", ret);
+				oplus_dp_ctrl_gpio = -1;
+			}
+		}
+	}
+	mtk_dp->oplus_dp_support = false;
+	mtk_dp->oplus_dp_support = device_property_read_bool(dev, "oplus-dp-support");
+	DPTXMSG("parser oplus-dp-support success is %d\n", mtk_dp->oplus_dp_support);
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	return component_add(&pdev->dev, &mtk_dp_component_ops);
 
 error:
@@ -4540,6 +4588,11 @@ static int mtk_drm_dp_remove(struct platform_device *pdev)
 	mutex_destroy(&dp_lock);
 	drm_connector_cleanup(&mtk_dp->conn);
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	if (!gpio_is_valid(oplus_dp_ctrl_gpio)) {
+		gpio_free(oplus_dp_ctrl_gpio); /* free oplus-dp-ctrl-gpio */
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
 	return 0;
 }
 

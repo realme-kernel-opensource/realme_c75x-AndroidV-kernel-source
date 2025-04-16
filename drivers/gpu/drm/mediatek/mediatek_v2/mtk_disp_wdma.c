@@ -33,6 +33,7 @@
 #define DISP_REG_WDMA_INTEN 0x0000
 #define INTEN_FLD_FME_CPL_INTEN REG_FLD_MSB_LSB(0, 0)
 #define INTEN_FLD_FME_UND_INTEN REG_FLD_MSB_LSB(1, 1)
+#define INTEN_FLD_FIFO_FULL_INTEN REG_FLD_MSB_LSB(2, 2)
 #define DISP_REG_WDMA_INTSTA 0x0004
 #define DISP_REG_WDMA_EN 0x0008
 #define WDMA_EN BIT(0)
@@ -201,7 +202,10 @@
 
 #define MT6991_OVLSYS1_WDMA0_AID_MANU 0x000
 #define MT6991_DISP1_WDMA1_AID_SETTING 0xB20
+#define MT6991_DISP1_WDMA4_AID_SETTING 0xB2C
 #define MT6991_DISP1_AID_SEL_MANUAL 0x10004
+#define DISP_WDMA1_AID_SEL_MANUAL	BIT(2)
+#define DISP_WDMA4_AID_SEL_MANUAL	BIT(5)
 
 /* AID offset in mmsys config */
 #define MT6895_WDMA0_AID_SEL	(0xB1CUL)
@@ -405,6 +409,10 @@ static irqreturn_t mtk_wdma_irq_handler(int irq, void *dev_id)
 			mtk_smi_dbg_hang_detect("wdma-underrun");
 		}
 	}
+	if (val & BIT(2)) {
+		DDPMSG("[IRQ] %s: FIFO FULL\n",
+			  mtk_dump_comp_str(wdma));
+	}
 
 	ret = IRQ_HANDLED;
 
@@ -592,7 +600,8 @@ static void mtk_wdma_start(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle)
 		mtk_ddp_write(comp, inten, DISP_REG_UFBC_WDMA_INTEN, handle);
 	} else {
 		inten = REG_FLD_VAL(INTEN_FLD_FME_CPL_INTEN, 1) |
-			REG_FLD_VAL(INTEN_FLD_FME_UND_INTEN, 1);
+			REG_FLD_VAL(INTEN_FLD_FME_UND_INTEN, 1) |
+			REG_FLD_VAL(INTEN_FLD_FIFO_FULL_INTEN, 1);
 		mtk_ddp_write(comp, WDMA_EN, DISP_REG_WDMA_EN, handle);
 		mtk_ddp_write(comp, inten, DISP_REG_WDMA_INTEN, handle);
 	}
@@ -679,11 +688,7 @@ static void mtk_wdma_stop(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle)
 		comp->fbdc_bw = 0;
 		comp->hrt_bw = 0;
 	} else {
-		mtk_ddp_write(comp, 0x0, DISP_REG_WDMA_INTEN, handle);
 		mtk_ddp_write(comp, 0x0, DISP_REG_WDMA_EN, handle);
-		mtk_ddp_write(comp, 0x0, DISP_REG_WDMA_INTSTA, handle);
-		mtk_ddp_write(comp, 0x01, DISP_REG_WDMA_RST, handle);
-		mtk_ddp_write(comp, 0x00, DISP_REG_WDMA_RST, handle);
 	}
 
 	if (data && data->sodi_config)
@@ -1783,20 +1788,32 @@ static void mtk_wdma_addon_config(struct mtk_ddp_comp *comp,
 			mmsys_reg = priv->side_config_regs_pa;
 			cmdq_pkt_write(handle, comp->cmdq_base,
 							mmsys_reg + MT6989_DISP1_AID_SEL_MANUAL,
-								DISP_WDMA0_AID_SEL_MANUAL, DISP_WDMA0_AID_SEL_MANUAL);
+							DISP_WDMA0_AID_SEL_MANUAL, DISP_WDMA0_AID_SEL_MANUAL);
 			cmdq_pkt_write(handle, comp->cmdq_base,
-							mmsys_reg + MT6989_DISP1_WDMA0_AID_SETTING, BIT(0), BIT(0));
+						mmsys_reg + MT6989_DISP1_WDMA0_AID_SETTING,
+						BIT(0), BIT(0));
 		} else if (priv->data->mmsys_id == MMSYS_MT6991) {
 			mtk_ddp_write(comp, 0x0,
 				WDMA_SECURITY_DISABLE, handle);
 			mmsys_reg = priv->side_config_regs_pa;
-			// DISP1_AID_SEL_MANUAL
-			cmdq_pkt_write(handle, comp->cmdq_base,
+			if (comp->id == DDP_COMPONENT_WDMA1) {
+				// DISP1_AID_SEL_MANUAL
+				cmdq_pkt_write(handle, comp->cmdq_base,
 							mmsys_reg + MT6991_DISP1_AID_SEL_MANUAL,
-								DISP_WDMA0_AID_SEL_MANUAL, DISP_WDMA0_AID_SEL_MANUAL);
-			// DISP1_WDMA1_AID_SETTING
-			cmdq_pkt_write(handle, comp->cmdq_base,
-							mmsys_reg + MT6991_DISP1_WDMA1_AID_SETTING, BIT(0), BIT(0));
+							DISP_WDMA0_AID_SEL_MANUAL, DISP_WDMA0_AID_SEL_MANUAL);
+				// DISP1_WDMA1_AID_SETTING
+				cmdq_pkt_write(handle, comp->cmdq_base,
+						mmsys_reg + MT6991_DISP1_WDMA1_AID_SETTING,
+						BIT(0), BIT(0));
+			} else if (comp->id == DDP_COMPONENT_WDMA4) {
+				cmdq_pkt_write(handle, comp->cmdq_base,
+						mmsys_reg + MT6991_DISP1_AID_SEL_MANUAL,
+						DISP_WDMA4_AID_SEL_MANUAL, DISP_WDMA4_AID_SEL_MANUAL);
+				// DISP1_WDMA1_AID_SETTING
+				cmdq_pkt_write(handle, comp->cmdq_base,
+						mmsys_reg + MT6991_DISP1_WDMA4_AID_SETTING,
+						BIT(0), BIT(0));
+			}
 		}
 	} else {
 		if (priv->data->mmsys_id == MMSYS_MT6989 ||
@@ -1813,13 +1830,21 @@ static void mtk_wdma_addon_config(struct mtk_ddp_comp *comp,
 			mtk_ddp_write(comp, 0x7,
 				WDMA_SECURITY_DISABLE, handle);
 			mmsys_reg = priv->side_config_regs_pa;
-			// DISP1_AID_SEL_MANUAL
-			cmdq_pkt_write(handle, comp->cmdq_base,
-							mmsys_reg + MT6991_DISP1_AID_SEL_MANUAL,
-								0, DISP_WDMA0_AID_SEL_MANUAL);
-			// DISP1_WDMA1_AID_SETTING
-			cmdq_pkt_write(handle, comp->cmdq_base,
-							mmsys_reg + MT6991_DISP1_WDMA1_AID_SETTING, 0, BIT(0));
+			if (comp->id == DDP_COMPONENT_WDMA1) {
+				// DISP1_AID_SEL_MANUAL
+				cmdq_pkt_write(handle, comp->cmdq_base,
+								mmsys_reg + MT6991_DISP1_AID_SEL_MANUAL,
+									0, DISP_WDMA1_AID_SEL_MANUAL);
+				// DISP1_WDMA1_AID_SETTING
+				cmdq_pkt_write(handle, comp->cmdq_base,
+								mmsys_reg + MT6991_DISP1_WDMA1_AID_SETTING, 0, BIT(0));
+			} else if (comp->id == DDP_COMPONENT_WDMA4) {
+				cmdq_pkt_write(handle, comp->cmdq_base,
+								mmsys_reg + MT6991_DISP1_AID_SEL_MANUAL,
+									0, DISP_WDMA4_AID_SEL_MANUAL);
+				cmdq_pkt_write(handle, comp->cmdq_base,
+								mmsys_reg + MT6991_DISP1_WDMA4_AID_SETTING, 0, BIT(0));
+			}
 		}
 	}
 
@@ -1843,10 +1868,9 @@ static void mtk_wdma_addon_config(struct mtk_ddp_comp *comp,
 golden_setting:
 	gsc = addon_config->addon_wdma_config.p_golden_setting_context;
 	mtk_wdma_golden_setting(comp, gsc, handle);
+	DDPMSG("[capture] config addr:0x%lx, roi:(%d,%d,%d,%d)\n",
+		(unsigned long)addr, clip_x, clip_y, clip_w, clip_h);
 
-	DDPINFO("%s:comp:%u,addr:0x%lx,roi:(%d,%d,%d,%d),fmt:0x%x\n",
-		__func__, comp->id, (unsigned long)addr, clip_x, clip_y,
-		clip_w, clip_h, comp->fb->format->format);
 	cfg_info->addr = addr;
 	cfg_info->width = clip_w;
 	cfg_info->height = clip_h;
@@ -2023,6 +2047,15 @@ void mtk_wdma_dump_golden_setting(struct mtk_ddp_comp *comp)
 		REG_FLD_VAL_GET(BUF_CON4_FLD_ISSUE_REQ_TH_V, value));
 }
 
+bool wdma_can_not_skip_secure(struct mtk_ddp_comp *comp)
+{
+	struct mtk_drm_private *priv = comp->mtk_crtc->base.dev->dev_private;
+
+	if (priv->data->mmsys_id == MMSYS_MT6991)
+		return false;
+	return true;
+}
+
 int mtk_wdma_dump(struct mtk_ddp_comp *comp)
 {
 	void __iomem *baddr = comp->regs;
@@ -2035,7 +2068,7 @@ int mtk_wdma_dump(struct mtk_ddp_comp *comp)
 
 	DDPDUMP("== %s REGS:0x%pa ==\n", mtk_dump_comp_str(comp), &comp->regs_pa);
 
-	if (comp->mtk_crtc && comp->mtk_crtc->sec_on) {
+	if (comp->mtk_crtc && comp->mtk_crtc->sec_on && wdma_can_not_skip_secure(comp)) {
 		DDPDUMP("Skip dump secure wdma!\n");
 		return 0;
 	}
@@ -2168,7 +2201,7 @@ int mtk_wdma_analysis(struct mtk_ddp_comp *comp)
 
 	DDPDUMP("== DISP %s ANALYSIS:0x%pa ==\n", mtk_dump_comp_str(comp), &comp->regs_pa);
 
-	if (comp->mtk_crtc && comp->mtk_crtc->sec_on) {
+	if (comp->mtk_crtc && comp->mtk_crtc->sec_on && wdma_can_not_skip_secure(comp)) {
 		DDPDUMP("Skip dump secure wdma!\n");
 		return 0;
 	}

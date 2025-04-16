@@ -327,11 +327,42 @@ static int bat_cali_major;
 static dev_t bat_cali_devno;
 static struct cdev *bat_cali_cdev;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static int store_reset_fuelgauge_daemon(struct mtk_gauge *gauge,
+        struct mtk_gauge_sysfs_field_info *info, int val);
+static int show_reset_fuelgauge_daemon(struct mtk_gauge *gauge,
+	struct mtk_gauge_sysfs_field_info *attr, int *val);
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 void __attribute__ ((weak))
 	mtk_battery_netlink_handler(struct sk_buff *skb)
 {
 }
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define Get_FakeOff_Param _IOW('k', 7, int)
+#define Turn_Off_Charging _IOW('k', 9, int)
+extern int oplus_chg_get_ui_soc(void);
+extern int oplus_chg_get_notify_flag(void);
+extern int oplus_chg_show_vooc_logo_ornot(void);
+extern int oplus_get_prop_status(void);
+extern bool oplus_chg_check_chip_is_null(void);
+extern bool mt6360_get_vbus_status(void);
+extern int mt6360_get_batid_volt(int *volt);
+extern int is_recovery_mode(struct mtk_battery *gm);
+extern void dis_GM3_SRC_SEL(struct mtk_gauge *gauge);
+extern bool oplus_chg_stats(void);
+
+struct mtk_gauge *gm = NULL;
+extern int fgauge_is_start;
+bool pmic_chrdet_status(void)   //TO-DO
+{
+#if defined(CONFIG_CHARGER_SC6607)
+	return oplus_chg_stats();
+#endif
+	return 0;
+}
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 static signed int reg_to_mv_value(struct mtk_gauge *gauge, signed int _reg)
 {
@@ -3758,6 +3789,9 @@ static struct mtk_gauge_sysfs_field_info mt6358_sysfs_field_tbl[] = {
 	GAUGE_SYSFS_FIELD_RO(battery_voltage_cali, GAUGE_PROP_BAT_EOC),
 	GAUGE_SYSFS_FIELD_RO(regmap_type_get, GAUGE_PROP_REGMAP_TYPE),
 	GAUGE_SYSFS_FIELD_RO(battery_cic2_get, GAUGE_PROP_CIC2),
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	GAUGE_SYSFS_FIELD_RW(reset_fuelgauge_daemon, store_reset_fuelgauge_daemon, show_reset_fuelgauge_daemon, GAUGE_PROP_RESET_FUELGAUGE_DAEMON),
+#endif
 };
 
 static struct attribute *mt6358_sysfs_attrs[GAUGE_PROP_MAX + 1];
@@ -3765,6 +3799,39 @@ static struct attribute *mt6358_sysfs_attrs[GAUGE_PROP_MAX + 1];
 static const struct attribute_group mt6358_sysfs_attr_group = {
 	.attrs = mt6358_sysfs_attrs,
 };
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define FG_DAEMON_SIZE 10
+#define FG_DAEMON_VAL 9
+static int show_reset_fuelgauge_daemon(struct mtk_gauge *gauge,
+	struct mtk_gauge_sysfs_field_info *attr, int *val)
+{
+	bm_err(gauge->gm, "%s\n", __func__);
+	bm_trace(gauge->gm, "[FG] %s:%d\n",
+		__func__, gauge->gm->force_restart_daemon);
+
+	*val = gauge->gm->force_restart_daemon;
+	return 0;
+}
+
+static int store_reset_fuelgauge_daemon(struct mtk_gauge *gauge,
+        struct mtk_gauge_sysfs_field_info *info, int val)
+{
+	bm_err(gauge->gm, "%s\n", __func__);
+
+	if (val == 0) {
+		gauge->gm->force_restart_daemon = false;
+	} else if (val == FG_DAEMON_VAL) {
+		gauge->gm->force_restart_daemon++;
+		bm_err(gauge->gm, "[%s]pid=%d,send kill kill_pid\n",
+				__func__,
+				gauge->gm->bm->fgd_pid);
+		kill_pid(find_vpid(gauge->gm->bm->fgd_pid), SIGKILL, 1);
+	}
+
+	return 0;
+}
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 static void mt6358_sysfs_init_attrs(void)
 {
@@ -3873,6 +3940,10 @@ struct file *filp, unsigned int cmd, unsigned long arg)
 	case Get_META_BAT_CAR_TUNE_VALUE:
 	case Set_META_BAT_CAR_TUNE_VALUE:
 	case Set_BAT_DISABLE_NAFG:
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	case Get_FakeOff_Param:
+	case Turn_Off_Charging:
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
 	case Set_CARTUNE_TO_KERNEL: {
 		bm_notice(
 			gm, "%s send to unlocked_ioctl cmd=0x%08x\n",
@@ -3893,7 +3964,9 @@ struct file *filp, unsigned int cmd, unsigned long arg)
 }
 #endif
 
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define USER_DATA_SIZE 20
+#endif
 
 static long adc_cali_ioctl(
 	struct file *file, unsigned int cmd, unsigned long arg)
@@ -3904,6 +3977,9 @@ static long adc_cali_ioctl(
 	int adc_out_data[2] = { 1, 1 };
 	int temp_car_tune;
 	int isdisNAFG = 0;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	int fakeoff_out_data[5] = {0, 0, 0, 0, 0};
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
 	struct mtk_battery *gm;
 
 	gm = get_mtk_battery();
@@ -4015,6 +4091,40 @@ static long adc_cali_ioctl(
 		bm_err(gm, "**** unlocked_ioctl Set_CARTUNE_TO_KERNEL[%d,%d], ret=%d\n",
 			adc_in_data[0], adc_in_data[1], ret);
 		break;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	case Get_FakeOff_Param:
+		user_data_addr = (int *)arg;
+		fakeoff_out_data[0] = oplus_chg_get_ui_soc();
+		fakeoff_out_data[1] = oplus_chg_get_notify_flag();
+#ifdef CONFIG_MT6360_PMIC
+		if (mt6360_get_vbus_status() == true && oplus_get_prop_status() != POWER_SUPPLY_STATUS_NOT_CHARGING) {
+#else
+		if (pmic_chrdet_status() == true && oplus_get_prop_status() != POWER_SUPPLY_STATUS_NOT_CHARGING) {
+#endif
+			fakeoff_out_data[2] = POWER_SUPPLY_STATUS_CHARGING;
+		} else {
+			fakeoff_out_data[2] = POWER_SUPPLY_STATUS_UNKNOWN;
+		}
+		fakeoff_out_data[3] = oplus_chg_show_vooc_logo_ornot();
+		if (is_fuelgauge_apply() == false) {
+			fakeoff_out_data[4] = oplus_chg_check_chip_is_null() == false ? 1 : 0;
+		} else {
+			if (fgauge_is_start == 1)
+				fakeoff_out_data[4] = 2;
+			else
+				fakeoff_out_data[4] = 0;
+		}
+
+		ret = copy_to_user(user_data_addr, fakeoff_out_data, USER_DATA_SIZE);
+		bm_err(gm, "ioctl : Get_FakeOff_Param: ui_soc:%d, g_NotifyFlag:%d, chr_det:%d, fast_chg:%d\n",
+			fakeoff_out_data[0], fakeoff_out_data[1], fakeoff_out_data[2], fakeoff_out_data[3]);
+		break;
+
+	case Turn_Off_Charging:
+		bm_err(gm, "ioctl : Turn_Off_Charging\n");
+		break;
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
+
 	default:
 		bm_err(gm, "**** unlocked_ioctl unknown IOCTL: 0x%08x\n", cmd);
 		mutex_unlock(&gm->gauge->fg_mutex);
@@ -4087,6 +4197,7 @@ static int mt6358_gauge_probe(struct platform_device *pdev)
 {
 	struct mtk_gauge *gauge;
 	int ret;
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	struct iio_channel *chan_bat_temp;
 
 	chan_bat_temp = devm_iio_channel_get(
@@ -4095,6 +4206,8 @@ static int mt6358_gauge_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "mt6358 requests probe deferral\n");
 		return -EPROBE_DEFER;
 	}
+	pr_err("mt6358_gauge_probe >>>");
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 	gauge = devm_kzalloc(&pdev->dev, sizeof(*gauge), GFP_KERNEL);
 	if (!gauge)
@@ -4187,8 +4300,26 @@ static int mt6358_gauge_probe(struct platform_device *pdev)
 			&gauge->psy_cfg);
 	mt6358_sysfs_create_group(gauge);
 	initial_set(gauge, 0, 0);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/*BSP.CHG.Basic 2020/04/30 add for fg*/
+	gm = gauge;
+	printk(KERN_ERR "!!!!! gm is ready\n");
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 	battery_init(pdev);
 	adc_cali_cdev_init(gauge->gm, pdev);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (is_fuelgauge_apply() == false) {
+		bm_err(gauge->gm, "disable GM 3.0\n");
+		disable_fg(gauge->gm);
+		dis_GM3_SRC_SEL(gauge);
+	} else if (is_recovery_mode(gauge->gm)) {
+		if (is_fuelgauge_apply() == true) {
+			//battery_recovery_init();
+		}
+	}
+	pr_err("%s done successfully..!!", __func__);
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 	return 0;
 }

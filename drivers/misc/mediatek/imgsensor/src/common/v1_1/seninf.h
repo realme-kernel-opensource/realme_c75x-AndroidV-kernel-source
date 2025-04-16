@@ -6,8 +6,14 @@
 #ifndef __SENINF_H__
 #define __SENINF_H__
 
-#include "seninf_cfg.h"
-#include "seninf_clk.h"
+
+#if defined(MTK_PLATFORM_MT6833)
+#include "../../mt6853/seninf_mt6833/seninf_cfg.h"
+#include "../../mt6853/seninf_mt6833/seninf_clk.h"
+#else
+#include "../../mt6853/seninf_mt6877/seninf_cfg.h"
+#include "../../mt6853/seninf_mt6877/seninf_clk.h"
+#endif
 
 #include <linux/atomic.h>
 #include <linux/mutex.h>

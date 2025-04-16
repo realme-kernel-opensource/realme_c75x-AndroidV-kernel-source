@@ -51,8 +51,8 @@
 
 
 enum h_skew_type {
-	SDC_ADFR = 0,			/* SA */
-	SDC_MFR = 1,			/* SM */
+	STANDARD_ADFR = 0,			/* SA */
+	STANDARD_MFR = 1,			/* SM */
 };
 
 struct lcm_pmic_info {
@@ -122,20 +122,20 @@ static int get_mode_enum(struct drm_display_mode *m)
 
 	m_vrefresh = drm_mode_vrefresh(m);
 	if (m->hdisplay == HAC_WQHD && m->vdisplay == VAC_WQHD) {
-		if (m_vrefresh == 60 && m->hskew == SDC_MFR)
+		if (m_vrefresh == 60 && m->hskew == STANDARD_MFR)
 			ret = WQHD_SDC60;
-		else if (m_vrefresh == 120 && m->hskew == SDC_MFR)
+		else if (m_vrefresh == 120 && m->hskew == STANDARD_MFR)
 			ret = WQHD_SDC120;
-		else if (m_vrefresh == 90 && m->hskew == SDC_MFR)
+		else if (m_vrefresh == 90 && m->hskew == STANDARD_MFR)
 			ret = WQHD_SDC90;
 		else
 			DDPMSG("Invalid display mode\n");
 	} else if (m->hdisplay == HAC_FHD && m->vdisplay == VAC_FHD) {
-		if (m_vrefresh == 60 && m->hskew == SDC_MFR)
+		if (m_vrefresh == 60 && m->hskew == STANDARD_MFR)
 			ret = FHD_SDC60;
-		else if (m_vrefresh == 120 && m->hskew == SDC_MFR)
+		else if (m_vrefresh == 120 && m->hskew == STANDARD_MFR)
 			ret = FHD_SDC120;
-		else if (m_vrefresh == 90 && m->hskew == SDC_MFR)
+		else if (m_vrefresh == 90 && m->hskew == STANDARD_MFR)
 			ret = FHD_SDC90;
 		else
 			DDPMSG("Invalid display mode\n");
@@ -453,7 +453,7 @@ static const struct drm_display_mode display_mode[MODE_NUM] = {
 		.vsync_start = VAC_WQHD + VFP,
 		.vsync_end = VAC_WQHD + VFP + VSA,
 		.vtotal = VAC_WQHD + VFP + VSA + VBP,
-		.hskew = SDC_MFR,
+		.hskew = STANDARD_MFR,
 	},
 	//wqhd_sdc_120_mode
 	{
@@ -466,7 +466,7 @@ static const struct drm_display_mode display_mode[MODE_NUM] = {
 		.vsync_start = VAC_WQHD + VFP,
 		.vsync_end = VAC_WQHD + VFP + VSA,
 		.vtotal = VAC_WQHD + VFP + VSA + VBP,
-		.hskew = SDC_MFR,
+		.hskew = STANDARD_MFR,
 	},
 	//wqhd_sdc_90_mode
 	{
@@ -479,7 +479,7 @@ static const struct drm_display_mode display_mode[MODE_NUM] = {
 		.vsync_start = VAC_WQHD + VFP,
 		.vsync_end = VAC_WQHD + VFP + VSA,
 		.vtotal = VAC_WQHD + VFP + VSA + VBP,
-		.hskew = SDC_ADFR,
+		.hskew = STANDARD_ADFR,
 	},
 	//fhd_sdc_60_mode
 	{
@@ -492,7 +492,7 @@ static const struct drm_display_mode display_mode[MODE_NUM] = {
 		.vsync_start = VAC_FHD + VFP,
 		.vsync_end = VAC_FHD + VFP + VSA,
 		.vtotal = VAC_FHD + VFP + VSA + VBP,
-		.hskew = SDC_MFR,
+		.hskew = STANDARD_MFR,
 	},
 	//FHD_SDC120
 	{
@@ -505,7 +505,7 @@ static const struct drm_display_mode display_mode[MODE_NUM] = {
 		.vsync_start = VAC_FHD + VFP,
 		.vsync_end = VAC_FHD + VFP + VSA,
 		.vtotal = VAC_FHD + VFP + VSA + VBP,
-		.hskew = SDC_MFR,
+		.hskew = STANDARD_MFR,
 	},
 	//FHD_SDC90
 	{
@@ -518,7 +518,7 @@ static const struct drm_display_mode display_mode[MODE_NUM] = {
 		.vsync_start = VAC_FHD + VFP,
 		.vsync_end = VAC_FHD + VFP + VSA,
 		.vtotal = VAC_FHD + VFP + VSA + VBP,
-		.hskew = SDC_MFR,
+		.hskew = STANDARD_MFR,
 	},
 };
 

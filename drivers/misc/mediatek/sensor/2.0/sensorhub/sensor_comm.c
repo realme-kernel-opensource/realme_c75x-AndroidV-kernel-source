@@ -113,6 +113,7 @@ static int sensor_comm_ctrl_send_locked(struct sensor_comm_ctrl *ctrl,
 			duration, ctrl->sensor_type, ctrl->command, retry);
 	return ret;
 }
+EXPORT_SYMBOL(sensor_comm_ctrl_send);
 
 int sensor_comm_ctrl_send(struct sensor_comm_ctrl *ctrl, unsigned int size)
 {

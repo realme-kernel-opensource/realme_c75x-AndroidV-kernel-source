@@ -33,6 +33,9 @@
 #include "fbt_cpu_ctrl.h"
 #include "fbt_cpu_ux.h"
 #include "sugov/cpufreq.h"
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GKI_CPUFREQ_BOUNCING)
+#include <../kernel/oplus_cpu/cpufreq_bouncing/cpufreq_bouncing.h>
+#endif
 
 #define TARGET_UNLIMITED_FPS 240
 #define NSEC_PER_HUSEC 100000
@@ -90,6 +93,9 @@ static int gas_threshold_for_high_TLP;
 static int global_sbe_dy_enhance;
 static int global_sbe_dy_enhance_max_pid;
 static int global_dfrc_fps_limit;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GKI_CPUFREQ_BOUNCING)
+static int is_rescue;
+#endif
 
 static struct fpsgo_loading temp_blc_dep[MAX_DEP_NUM];
 static struct fbt_setting_info sinfo;
@@ -370,6 +376,13 @@ static void fbt_ux_set_cap_with_sbe(struct render_info *thr)
 		fbt_set_limit(thr->pid, local_min_cap, thr->pid, thr->buffer_id,
 			thr->dep_valid_size, thr->dep_arr, thr, 0);
 	fpsgo_put_fbt_mlock(__func__);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GKI_CPUFREQ_BOUNCING)
+        if (is_rescue && local_min_cap > 50)
+                cb_ceiling_free_enable(true);
+        else
+                cb_ceiling_free_enable(false);
+#endif
 
 	fbt_ux_set_cap(thr, local_min_cap, local_max_cap);
 	fpsgo_systrace_c_fbt(thr->pid, thr->buffer_id, local_min_cap, "[ux]perf_idx");
@@ -1222,6 +1235,9 @@ void fpsgo_sbe_rescue(struct render_info *thr, int start, int enhance,
 			#endif
 		}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GKI_CPUFREQ_BOUNCING)
+                is_rescue = 1;
+#endif
 		fbt_ux_set_cap_with_sbe(thr);
 		fpsgo_systrace_c_fbt(thr->pid, thr->buffer_id, thr->sbe_enhance, "[ux]sbe_rescue");
 	} else {
@@ -1253,6 +1269,9 @@ void fpsgo_sbe_rescue(struct render_info *thr, int start, int enhance,
 		}
 
 		fbt_ux_set_cap_with_sbe(thr);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GKI_CPUFREQ_BOUNCING)
+		is_rescue = 0;
+#endif
 		fpsgo_systrace_c_fbt(thr->pid, thr->buffer_id, 0, "[ux]rescue_type");
 		fpsgo_systrace_c_fbt(thr->pid, thr->buffer_id, thr->sbe_enhance, "[ux]sbe_rescue");
 	}

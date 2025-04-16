@@ -104,6 +104,16 @@ static int mt6379_get_ichg(struct charger_device *chgdev, u32 *uA)
 	return ret;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static int mt6379_set_ship_mode(struct charger_device *chgdev)
+{
+	struct mt6379_charger_data *cdata = charger_get_data(chgdev);
+
+	dev_info(cdata->dev, "mt6379_set_ship_mode\n");
+	return mt6379_set_shipping_mode(cdata);
+}
+#endif
+
 static int mt6379_get_min_ichg(struct charger_device *chgdev, u32 *uA)
 {
 	*uA = 300000;
@@ -766,6 +776,47 @@ out:
 	return ret;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static int mt6379_set_otg_cc(struct charger_device *chgdev, u32 uA)
+{
+	int ret;
+	struct mt6379_charger_data *cdata = charger_get_data(chgdev);
+
+	dev_info(cdata->dev, "otg_cc=%d\n", uA);
+	ret = regulator_set_current_limit(cdata->otg_regu, uA, uA);
+	if (ret < 0)
+		dev_err(cdata->dev, "failed to set otg regulator current\n");
+	return ret;
+}
+
+static int mt6379_enable_otg(struct charger_device *chgdev, bool en)
+{
+	struct mt6379_charger_data *cdata = charger_get_data(chgdev);
+	int ret = 0;
+	dev_info(cdata->dev, "%s, en = %d\n", __func__, en);
+	if (en) {
+		ret = regulator_enable(cdata->otg_regu);
+	} else {
+		ret = regulator_disable(cdata->otg_regu);
+	}
+	return ret;
+}
+
+static int mt6379_set_otg_vol(struct charger_device *chgdev, u32 uv)
+{
+	int ret;
+	struct mt6379_charger_data *cdata = charger_get_data(chgdev);
+
+	dev_info(cdata->dev, "otg_vol=%d\n", uv);
+
+	ret = regulator_set_voltage(cdata->otg_regu, uv, uv);
+	if (ret < 0)
+		dev_err(cdata->dev, "failed to set otg regulator voltage\n");
+
+	return ret;
+}
+#endif
+
 static int mt6379_enable_discharge(struct charger_device *chgdev, bool en)
 {
 	struct mt6379_charger_data *cdata = charger_get_data(chgdev);
@@ -1330,6 +1381,14 @@ static const struct charger_ops mt6379_charger_ops = {
 	.enable_usbid_floating = mt6379_enable_usbid_floating,
 	/* set boot volt times */
 	.set_boot_volt_times = mt6379_set_boot_volt_times,
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	/*OTG*/
+	.set_boost_current_limit = mt6379_set_otg_cc,
+	.enable_otg = mt6379_enable_otg,
+	.set_boost_voltage_limit = mt6379_set_otg_vol,
+	/*Shipmode*/
+	.enable_ship_mode = mt6379_set_ship_mode,
+#endif
 };
 
 static const struct charger_properties mt6379_charger_props = {

@@ -1970,9 +1970,20 @@ void calc_mml_layer_weight(struct drm_mtk_layering_info *disp_info,
 	int idx, int layer_idx, int *overlap_w)
 {
 	u32 ratio = 0;
+	struct drm_mtk_layer_config *layer_info;
 
 	if (disp_info == NULL || overlap_w == NULL || idx >= LYE_CRTC || idx < 0)
 		return;
+
+	layer_info = &disp_info->input_config[idx][layer_idx];
+
+	if (l_rule_info->ovl_exdma_rule) {
+		/* need to check ovl dl hrt */
+		if (mtk_has_layer_cap(layer_info, MTK_MML_DISP_DIRECT_LINK_LAYER)) {
+			*overlap_w = 0;
+			return ;
+		}
+	}
 
 	ratio = calc_mml_rsz_ratio(&disp_info->mml_cfg[idx][layer_idx]);
 	if (ratio == 100)
@@ -3025,6 +3036,7 @@ static int mtk_lye_get_exdma_comp_id(int disp_idx, int layer_idx,
 	struct mtk_drm_private *priv = drm_dev->dev_private;
 
 	/* TODO: The component ID should be changed by ddp path and platforms */
+	/* need align with mtk_crtc_get_plane_comp_id */
 	if (disp_idx == 0) {
 		if (priv->data->mmsys_id == MMSYS_MT6991) {
 			int exdma_comp = 0;
@@ -3221,7 +3233,7 @@ static void clear_layer(struct drm_mtk_layering_info *disp_info,
 		{
 			c->layer_caps &= ~MTK_DISP_RSZ_LAYER;
 
-			if (!(priv->data->ovl_exdma_rule) &&
+			if (!(l_rule_info->ovl_exdma_rule) &&
 				(c->src_width != c->dst_width ||
 			     c->src_height != c->dst_height) &&
 			    !mtk_has_layer_cap(c, MTK_MDP_RSZ_LAYER)) {
@@ -3353,7 +3365,7 @@ static int _dispatch_lye_blob_idx(struct drm_mtk_layering_info *disp_info,
 			layer_map &= ~layer_map_idx;
 
 		layer_map_idx = HRT_GET_FIRST_SET_BIT(layer_map);
-		if (priv->data->ovl_exdma_rule) {
+		if (l_rule_info->ovl_exdma_rule) {
 
 			if (mtk_has_layer_cap(layer_info, MTK_MML_DISP_DIRECT_DECOUPLE_LAYER)) {
 				comp_state.comp_id = DDP_COMPONENT_OVL_EXDMA0;
@@ -4204,8 +4216,20 @@ static int RPO_rule(struct drm_crtc *crtc,
 		if (!is_rsz_valid(c))
 			continue;
 
-		if (same_ratio_limitation(crtc, c, RATIO_LIMIT, disp_w, disp_h))
-			continue;
+		if (!(!(mtk_crtc->is_dual_pipe) &&
+			(i == 0 && private && private->data &&
+			((private->data->mmsys_id == MMSYS_MT6761) ||
+			(private->data->mmsys_id == MMSYS_MT6765) ||
+			(private->data->mmsys_id == MMSYS_MT6768) ||
+			(private->data->mmsys_id == MMSYS_MT6781) ||
+			(private->data->mmsys_id == MMSYS_MT6877) ||
+			(private->data->mmsys_id == MMSYS_MT6833) ||
+			(private->data->mmsys_id == MMSYS_MT6853) ||
+			(private->data->mmsys_id == MMSYS_MT6885))))) {
+			if (same_ratio_limitation(crtc, c, RATIO_LIMIT,
+				disp_w, disp_h))
+				continue;
+		}
 
 		mtk_rect_make(&src_layer_roi,
 			((c->dst_offset_x * c->src_width * 10) / c->dst_width + 5) / 10,

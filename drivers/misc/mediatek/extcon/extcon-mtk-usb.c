@@ -24,7 +24,11 @@
 #include "extcon-mtk-usb.h"
 
 #if IS_ENABLED(CONFIG_TCPC_CLASS)
-#include "tcpm.h"
+#ifdef CONFIG_OPLUS_PD_EXT_SUPPORT
+#include "../../../power/oplus/pd_ext/inc/tcpm.h"
+#else
+#include <tcpm.h>
+#endif
 #endif
 
 static const unsigned int usb_extcon_cable[] = {
@@ -346,10 +350,20 @@ static int mtk_usb_extcon_vbus_init(struct mtk_extcon_info *extcon)
 		goto fail;
 	}
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	extcon->vbus = devm_regulator_get(dev, "vbus");
+#else
 	extcon->vbus =  devm_regulator_get_exclusive(dev, "vbus");
+#endif
+
 	if (IS_ERR(extcon->vbus)) {
 		/* try to get by name */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		extcon->vbus = devm_regulator_get(dev, "usb-otg-vbus");
+#else
 		extcon->vbus =  devm_regulator_get_exclusive(dev, "usb-otg-vbus");
+#endif
+
 		if (IS_ERR(extcon->vbus)) {
 			dev_err(dev, "failed to get vbus\n");
 			ret = PTR_ERR(extcon->vbus);
@@ -394,15 +408,27 @@ static int mtk_extcon_tcpc_notifier(struct notifier_block *nb,
 	struct mtk_extcon_info *extcon =
 			container_of(nb, struct mtk_extcon_info, tcpc_nb);
 	struct device *dev = extcon->dev;
+
+#ifndef OPLUS_FEATURE_CHG_BASIC
+	/* oplus add for DX-4 charge */
 	bool vbus_on;
+#endif
 
 	switch (event) {
+
 	case TCP_NOTIFY_SOURCE_VBUS:
 		dev_info(dev, "source vbus = %dmv\n",
 				 noti->vbus_state.mv);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if (extcon->oplus_vbus_set)
+			mtk_usb_extcon_set_vbus(extcon, (noti->vbus_state.mv) ? true : false);
+#else
 		vbus_on = (noti->vbus_state.mv) ? true : false;
 		mtk_usb_extcon_set_vbus(extcon, vbus_on);
+#endif /* OPLUS_FEATURE_CHG_BASIC */
+
 		break;
+
 	case TCP_NOTIFY_TYPEC_STATE:
 		dev_info(dev, "old_state=%d, new_state=%d\n",
 				noti->typec_state.old_state,
@@ -718,7 +744,11 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	extcon->bypss_typec_sink =
 		of_property_read_bool(dev->of_node,
 			"mediatek,bypss-typec-sink");
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	extcon->oplus_vbus_set =
+		of_property_read_bool(dev->of_node,
+			"oplus,vbus_set");
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 #if IS_ENABLED(CONFIG_TCPC_CLASS)
 	ret = of_property_read_string(dev->of_node, "tcpc", &tcpc_name);
 	if (of_property_read_bool(dev->of_node, "mediatek,u2") && ret == 0

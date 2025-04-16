@@ -1318,6 +1318,7 @@ void mml_comp_qos_calc(struct mml_comp *comp, struct mml_task *task,
 	bool hrt;
 
 	datasize = comp->hw_ops->qos_datasize_get(task, ccfg);
+	mml_mmp(datasize, MMPROFILE_FLAG_PULSE, comp->id, datasize);
 	if (!datasize) {
 		hrt = false;
 		srt_bw = 0;
@@ -1372,6 +1373,7 @@ void mml_comp_qos_calc(struct mml_comp *comp, struct mml_task *task,
 	bw->stash_srt_bw = max_t(u32, bw->stash_srt_bw, stash_srt_bw);
 	bw->stash_hrt_bw = max_t(u32, bw->stash_hrt_bw, stash_hrt_bw);
 
+	mml_mmp(hrt, MMPROFILE_FLAG_PULSE, comp->id, bw->hrt_bw);
 	mml_msg("%s comp %u bw %u %u stash %u %u tput %u%s",
 		__func__, comp->id, srt_bw, hrt_bw, stash_srt_bw, stash_hrt_bw, throughput,
 		hrt ? " hrt" : "");
@@ -1437,6 +1439,9 @@ void mml_comp_qos_set(struct mml_comp *comp, struct mml_task *task,
 	updated = true;
 	mml->port_srt_bw[comp->sysid][comp->larb_port] = srt_bw;
 	mml->port_hrt_bw[comp->sysid][comp->larb_port] = hrt_bw;
+	mml_mmp(bw_port, MMPROFILE_FLAG_PULSE,
+		(comp->sysid << 24) | (comp->larb_port << 16) | comp->id,
+		(srt_bw << 16) | hrt_bw);
 
 skip_update:
 	if (cfg->dpc) {

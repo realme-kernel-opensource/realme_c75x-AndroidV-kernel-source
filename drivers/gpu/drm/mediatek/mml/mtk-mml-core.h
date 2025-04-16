@@ -186,7 +186,6 @@ do { \
 		if (len >= LINK_MAX) \
 			pr_debug("%s %d len:%d over max:%d\n", \
 				__func__, __LINE__, len, LINK_MAX); \
-		_mml_log("[err][fatal]" fmt, ##args); \
 		_fatal_api(DB_OPT_MML, tag, fmt, ##args); \
 	} while (0)
 

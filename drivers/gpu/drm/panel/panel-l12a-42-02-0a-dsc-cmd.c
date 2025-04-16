@@ -32,7 +32,7 @@
 #endif
 
 #ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
-#include "../mediatek/mediatek_v2/mtk_corner_pattern/mtk_data_hw_roundedpattern.h"
+//#include "../mediatek/mediatek_v2/mtk_corner_pattern/mtk_data_hw_roundedpattern.h"
 #endif
 
 #include <linux/atomic.h>
@@ -599,13 +599,13 @@ static struct mtk_panel_params ext_params = {
 	},
 	.lp_perline_en = 1,
 #ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
-	.round_corner_en = 0,
-	.corner_pattern_height = ROUND_CORNER_H_TOP,
-	.corner_pattern_height_bot = ROUND_CORNER_H_BOT,
-	.corner_pattern_tp_size_l = sizeof(top_rc_pattern_l),
-	.corner_pattern_lt_addr_l = (void *)top_rc_pattern_l,
-	.corner_pattern_tp_size_r = sizeof(top_rc_pattern_r),
-	.corner_pattern_lt_addr_r = (void *)top_rc_pattern_r,
+//	.round_corner_en = 0,
+//	.corner_pattern_height = ROUND_CORNER_H_TOP,
+//	.corner_pattern_height_bot = ROUND_CORNER_H_BOT,
+//	.corner_pattern_tp_size_l = sizeof(top_rc_pattern_l),
+//	.corner_pattern_lt_addr_l = (void *)top_rc_pattern_l,
+//	.corner_pattern_tp_size_r = sizeof(top_rc_pattern_r),
+//	.corner_pattern_lt_addr_r = (void *)top_rc_pattern_r,
 #endif
 };
 
@@ -699,13 +699,13 @@ static struct mtk_panel_params ext_params_90hz = {
 	},
 	.lp_perline_en = 1,
 #ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
-	.round_corner_en = 0,
-	.corner_pattern_height = ROUND_CORNER_H_TOP,
-	.corner_pattern_height_bot = ROUND_CORNER_H_BOT,
-	.corner_pattern_tp_size_l = sizeof(top_rc_pattern_l),
-	.corner_pattern_lt_addr_l = (void *)top_rc_pattern_l,
-	.corner_pattern_tp_size_r = sizeof(top_rc_pattern_r),
-	.corner_pattern_lt_addr_r = (void *)top_rc_pattern_r,
+//	.round_corner_en = 0,
+//	.corner_pattern_height = ROUND_CORNER_H_TOP,
+//	.corner_pattern_height_bot = ROUND_CORNER_H_BOT,
+//	.corner_pattern_tp_size_l = sizeof(top_rc_pattern_l),
+//	.corner_pattern_lt_addr_l = (void *)top_rc_pattern_l,
+//	.corner_pattern_tp_size_r = sizeof(top_rc_pattern_r),
+//	.corner_pattern_lt_addr_r = (void *)top_rc_pattern_r,
 
 #endif
 };
@@ -800,13 +800,13 @@ static struct mtk_panel_params ext_params_120hz = {
 	},
 	.lp_perline_en = 1,
 #ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
-	.round_corner_en = 0,
-	.corner_pattern_height = ROUND_CORNER_H_TOP,
-	.corner_pattern_height_bot = ROUND_CORNER_H_BOT,
-	.corner_pattern_tp_size_l = sizeof(top_rc_pattern_l),
-	.corner_pattern_lt_addr_l = (void *)top_rc_pattern_l,
-	.corner_pattern_tp_size_r = sizeof(top_rc_pattern_r),
-	.corner_pattern_lt_addr_r = (void *)top_rc_pattern_r,
+//	.round_corner_en = 0,
+//	.corner_pattern_height = ROUND_CORNER_H_TOP,
+//	.corner_pattern_height_bot = ROUND_CORNER_H_BOT,
+//	.corner_pattern_tp_size_l = sizeof(top_rc_pattern_l),
+//	.corner_pattern_lt_addr_l = (void *)top_rc_pattern_l,
+//	.corner_pattern_tp_size_r = sizeof(top_rc_pattern_r),
+//	.corner_pattern_lt_addr_r = (void *)top_rc_pattern_r,
 
 #endif
 };

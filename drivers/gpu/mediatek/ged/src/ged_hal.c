@@ -2124,6 +2124,39 @@ static ssize_t loading_window_size_store(struct kobject *kobj,
 
 static KOBJ_ATTR_RW(loading_window_size);
 
+#if defined(MTK_GPU_EB_SUPPORT)
+unsigned int g_enable_idx_notify;
+static ssize_t enable_idx_notify_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%u(%d)\n", g_enable_idx_notify,
+						mtk_gpueb_sysram_read(SYSRAM_GPU_EB_USE_IDX_NOTIFY));
+}
+static ssize_t enable_idx_notify_store(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		const char *buf, size_t count)
+{
+	char acBuffer[GED_SYSFS_MAX_BUFF_SIZE];
+	int i32Value;
+
+	if ((count > 0) && (count < GED_SYSFS_MAX_BUFF_SIZE)) {
+		if (scnprintf(acBuffer, GED_SYSFS_MAX_BUFF_SIZE, "%s", buf)) {
+			if (kstrtoint(acBuffer, 0, &i32Value) == 0) {
+				g_enable_idx_notify = i32Value;
+				if (i32Value > 0 && i32Value < 3)
+					mtk_gpueb_sysram_write(SYSRAM_GPU_EB_USE_IDX_NOTIFY, i32Value);
+				else
+					mtk_gpueb_sysram_write(SYSRAM_GPU_EB_USE_IDX_NOTIFY, 0);
+			}
+		}
+	}
+
+	return count;
+}
+static KOBJ_ATTR_RW(enable_idx_notify);
+#endif
+
 //-----------------------------------------------------------------------------
 #if defined(MTK_GPU_SLC_POLICY)
 static ssize_t gpu_slc_policy_show(struct kobject *kobj,
@@ -2480,6 +2513,15 @@ GED_ERROR ged_hal_init(void)
 		goto ERROR;
 	}
 
+#if defined(MTK_GPU_EB_SUPPORT)
+	err = ged_sysfs_create_file(hal_kobj, &kobj_attr_enable_idx_notify);
+	if (unlikely(err != GED_OK)) {
+		GED_LOGE(
+			"Failed to create enable_idx_notify entry!\n");
+		goto ERROR;
+	}
+#endif
+
 #if defined(MTK_GPU_SLC_POLICY)
 	err = ged_sysfs_create_file(hal_kobj, &kobj_attr_gpu_slc_policy);
 	if (unlikely(err != GED_OK)) {
@@ -2581,6 +2623,11 @@ void ged_hal_exit(void)
 	ged_sysfs_remove_file(hal_kobj, &kobj_attr_apo_legacy);
 #endif /* CONFIG_MTK_GPU_APO_SUPPORT */
 	ged_sysfs_remove_file(hal_kobj, &kobj_attr_autosuspend_stress);
+
+#if defined(MTK_GPU_EB_SUPPORT)
+		ged_sysfs_remove_file(hal_kobj, &kobj_attr_enable_idx_notify);
+#endif
+
 #if defined(MTK_GPU_SLC_POLICY)
 	ged_sysfs_remove_file(hal_kobj, &kobj_attr_gpu_slc_policy);
 #endif /* MTK_GPU_SLC_POLICY */

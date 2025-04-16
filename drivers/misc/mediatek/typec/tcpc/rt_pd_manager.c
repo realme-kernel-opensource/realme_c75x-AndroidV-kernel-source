@@ -345,6 +345,9 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 		typec_mux_set(rpmd->mux[idx], &state);
 		break;
 	case TCP_NOTIFY_WD0_STATE:
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		break;
+#endif
 		tcpm_typec_change_role_postpone(rpmd->tcpc[idx],
 						noti->wd0_state.wd0 ?
 						rpmd->role_def[idx] :

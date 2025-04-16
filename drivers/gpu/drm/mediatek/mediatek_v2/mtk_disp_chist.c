@@ -269,6 +269,7 @@ static int disp_chist_copy_hist_to_user(struct drm_device *dev, struct drm_file 
 	chist_data = comp_to_chist(comp);
 	if (chist_data->primary_data->present_fence == 0) {
 		hist->present_fence = 0;
+		DDPPR_ERR("%s, present_fence err return\n", __func__);
 		return ret;
 	}
 
@@ -1032,10 +1033,21 @@ static void disp_chist_get_hist(struct mtk_ddp_comp *comp)
 				disp_chist_get_hist_dual_pipe(comp, i, max_bins);
 			else {
 				int j = 0;
+				int flag = 1;
 
 				for (; j < prim_data->disp_hist[i].bin_count; j++) {
 					prim_data->disp_hist[i].hist[j] = readl(comp->regs
 						+ DISP_CHIST_SRAM_R_IF) >> disp_chist_shift_num(comp);
+					if (prim_data->disp_hist[i].hist[j] != 0) {
+						flag = 0;
+					}
+				}
+				if (flag) {
+					j = 0;
+					for (; j < prim_data->disp_hist[i].bin_count; j++)
+						DDPMSG("%s hist[%d][%d]:%d", __func__, i, j,
+							prim_data->disp_hist[i].hist[j]);
+					disp_chist_dump(comp);
 				}
 				if (g_detail_log) {
 					j = 0;

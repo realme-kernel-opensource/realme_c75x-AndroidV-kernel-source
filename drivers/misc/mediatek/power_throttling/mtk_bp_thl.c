@@ -16,6 +16,10 @@
 #define BPCB_MAX_NUM 16
 #define MAX_VALUE 0x7FFF
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
+#define OPLUS_FEATURE_CHG_BASIC
+#endif
+
 static struct task_struct *bp_notify_thread;
 static bool bp_notify_flag;
 static bool bp_hpt_notify_only_flag;
@@ -40,6 +44,7 @@ struct bp_thl_priv {
 	int temp_cur_stage;
 	int temp_max_stage;
 	int *throttle_table;
+	unsigned int user_enable;
 	struct work_struct soc_work;
 	struct power_supply *psy;
 };
@@ -52,6 +57,7 @@ struct md_bp_priv {
 	unsigned int md_thl_h;
 };
 static struct md_bp_priv *md_bp_data;
+static DEFINE_MUTEX(bp_lock);
 
 void register_bp_thl_notify(
 	battery_percent_callback bp_cb,
@@ -149,6 +155,29 @@ void exec_bp_thl_md_callback(enum BATTERY_PERCENT_LEVEL_TAG bp_level)
 	}
 }
 
+int bp_set_user_enable(unsigned int enable)
+{
+	if (!md_bp_data) {
+		pr_info("[%s] md_bp_data not init\n", __func__);
+		return -ENOENT;
+	}
+
+	bp_thl_data->user_enable = enable;
+	mutex_lock(&bp_lock);
+	if (enable)
+		bp_notify_flag = true;
+	else
+		exec_bp_thl_callback(BATTERY_PERCENT_LEVEL_0);
+
+	if (bp_notify_flag)
+		wake_up_interruptible(&bp_notify_waiter);
+
+	mutex_unlock(&bp_lock);
+	pr_info("[%s] set bp user enable:%d\n\n", __func__, enable);
+	return 0;
+}
+EXPORT_SYMBOL(bp_set_user_enable);
+
 static ssize_t bp_thl_ut_show(
 		struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -237,8 +266,9 @@ int bp_notify_handler(void *unused)
 	do {
 		wait_event_interruptible(bp_notify_waiter, (bp_notify_flag == true) ||
 			(bp_md_notify_flag == true));
+		mutex_lock(&bp_lock);
 		__pm_stay_awake(bp_notify_lock);
-		if (bp_notify_flag) {
+		if (bp_notify_flag && bp_thl_data->user_enable == 1) {
 			exec_bp_thl_callback(bp_thl_data->bp_thl_lv);
 			bp_notify_flag = false;
 		}
@@ -246,7 +276,9 @@ int bp_notify_handler(void *unused)
 			exec_bp_thl_md_callback(md_bp_data->md_thl_lv);
 			bp_md_notify_flag = false;
 		}
+		bp_notify_flag = false;
 		__pm_relax(bp_notify_lock);
+		mutex_unlock(&bp_lock);
 	} while (!kthread_should_stop());
 	return 0;
 }
@@ -265,6 +297,7 @@ int bp_psy_event(struct notifier_block *nb, unsigned long event, void *v)
 
 static void check_md_throttle(int soc)
 {
+	pr_info("[%s] bp_thl_data soc=%d\n", __func__, soc);
 	if (!md_bp_data->md_thl_enable)
 		return;
 
@@ -281,7 +314,11 @@ static void check_md_throttle(int soc)
 
 static void soc_handler(struct work_struct *work)
 {
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	struct power_supply *psy;
+#else
+	struct power_supply *psy_mtk;
+#endif
 	union power_supply_propval val;
 	int ret, soc, temp, new_lv, soc_thd, temp_thd, soc_stage, temp_stage;
 	static int last_soc = MAX_VALUE, last_temp = MAX_VALUE;
@@ -297,6 +334,7 @@ static void soc_handler(struct work_struct *work)
 		return;
 	}
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	psy =  bp_thl_data->psy;
 
 	if (strcmp(psy->desc->name, "battery") != 0)
@@ -313,6 +351,34 @@ static void soc_handler(struct work_struct *work)
 		pr_info("%s:%d soc:%d return\n", __func__, __LINE__, soc);
 		return;
 	}
+#else
+	psy_mtk = power_supply_get_by_name("battery");
+	if (!psy_mtk) {
+		pr_err("%s get psy_mtk failed!\n", __func__);
+		return;
+	}
+
+	ret = power_supply_get_property(psy_mtk, POWER_SUPPLY_PROP_CAPACITY, &val);
+	if (ret) {
+		pr_err("%s get soc failed!\n", __func__);
+		return;
+	}
+
+	soc = val.intval;
+	pr_info("%s:%d get soc is %d, ret = %d\n", __func__, __LINE__, soc, ret);
+
+
+	ret = power_supply_get_property(psy_mtk, POWER_SUPPLY_PROP_TEMP, &val);
+	if (ret) {
+		pr_err("%s get temp failed!\n", __func__);
+		return;
+	}
+
+	temp = val.intval / 10;
+
+	pr_info("%s:%d get temp is %d, ret = %d\n", __func__, __LINE__, temp, ret);
+
+#endif
 
 	if (soc != last_soc)
 		check_md_throttle(soc);
@@ -363,6 +429,8 @@ static void soc_handler(struct work_struct *work)
 			}
 		}
 	} while (loop);
+
+	mutex_lock(&bp_lock);
 	new_lv = bp_thl_data->throttle_table[soc_stage+temp_stage*(bp_thl_data->soc_max_stage+1)];
 	if (last_soc == MAX_VALUE) {
 		bp_thl_data->bp_thl_lv = new_lv;
@@ -380,6 +448,7 @@ static void soc_handler(struct work_struct *work)
 
 	if (bp_md_notify_flag || bp_notify_flag)
 		wake_up_interruptible(&bp_notify_waiter);
+	mutex_unlock(&bp_lock);
 	return;
 }
 
@@ -553,6 +622,7 @@ static int bp_thl_probe(struct platform_device *pdev)
 		pr_notice("parse_md_setting fail\n");
 		return ret;
 	}
+	priv->user_enable = 1;
 	bp_thl_data = priv;
 	md_bp_data = md_priv;
 	pr_notice("md_thl_enable: %d\n", md_bp_data->md_thl_enable);

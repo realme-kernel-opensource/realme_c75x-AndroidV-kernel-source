@@ -25,7 +25,7 @@
 #include <linux/slab.h>
 #include "tzbatt_initcfg.h"
 #include <linux/power_supply.h>
-
+#include <soc/oplus/boot/oplus_project.h>
 
 static kuid_t uid = KUIDT_INIT(0);
 static kgid_t gid = KGIDT_INIT(1000);
@@ -374,7 +374,13 @@ struct thermal_cooling_device *cdev, unsigned long state)
 		/* To trigger data abort to reset the system
 		 * for thermal protection.
 		 */
-		BUG_ON(1);
+#ifndef OPLUS_FEATURE_CHG_BASIC
+/* Delete for battery protect */
+		if (get_eng_version() != HIGH_TEMP_AGING)
+			BUG_ON(1);
+		else
+			pr_info("%s should reset but bypass\n", __func__);
+#endif
 	}
 	return 0;
 }

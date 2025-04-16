@@ -31,6 +31,8 @@ enum {
 	ps,
 	baro,
 	sar,
+	rear_als,
+	rear_flicker,
 	maxhandle,
 };
 
@@ -68,6 +70,12 @@ inline int sensor_to_handle(int sensor)
 	case ID_SAR:
 		handle = sar;
 		break;
+	case ID_REAR_ALS:
+		handle = rear_als;
+		break;
+	case ID_REAR_REAR_FLICKER:
+		handle = rear_flicker;
+		break;
 	}
 	return handle;
 }
@@ -97,6 +105,12 @@ static inline int handle_to_sensor(int handle)
 		break;
 	case sar:
 		sensor = ID_SAR;
+		break;
+	case rear_als:
+		sensor = ID_REAR_ALS;
+		break;
+	case rear_flicker:
+		sensor = ID_REAR_REAR_FLICKER;
 		break;
 	}
 	return sensor;

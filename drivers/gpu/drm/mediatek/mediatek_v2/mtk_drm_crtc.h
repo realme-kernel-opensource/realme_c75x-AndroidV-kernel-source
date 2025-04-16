@@ -139,6 +139,15 @@ enum DISP_VBLANK_REC_JOB_TYPE {
 	DISP_REC_JOB_TYPE_MAX
 };
 
+enum EVENT_TRIGGER_PT {
+	WFE_CABC_START = 1,
+	WFE_CABC_END,
+	SET_CABC_START,
+	SET_CABC_END,
+	SET_STREAM_EOF_END,
+	EVENT_PT_MAX
+};
+
 #define IGNORE_MODULE_IRQ
 
 #define DISP_SLOT_CUR_CONFIG_FENCE_BASE 0x0000
@@ -167,9 +176,13 @@ enum DISP_VBLANK_REC_JOB_TYPE {
 	(DISP_SLOT_CUR_STASH_BW_VAL(MAX_LAYER_NR) + (0x4 * (n)))
 #define DISP_SLOT_CUR_OUTPUT_FENCE (DISP_SLOT_CUR_HDR_STASH_BW_VAL(MAX_LAYER_NR))
 #define DISP_SLOT_CUR_INTERFACE_FENCE (DISP_SLOT_CUR_OUTPUT_FENCE + 0x4)
+#define DISP_SLOT_SKIP_CHECK_TRIGGER (DISP_SLOT_CUR_INTERFACE_FENCE + 0x4)
 #define DISP_SLOT_OVL_STATUS						       \
-	((DISP_SLOT_CUR_INTERFACE_FENCE + 0x4))
-#define DISP_SLOT_READ_DDIC_BASE (DISP_SLOT_OVL_STATUS + 0x4)
+	((DISP_SLOT_SKIP_CHECK_TRIGGER + 0x4))
+#define DISP_SLOT_TRIG_STATUS (DISP_SLOT_OVL_STATUS + 0x4)
+#define DISP_SLOT_PU_STATUS (DISP_SLOT_TRIG_STATUS + 0x4)
+#define DISP_SLOT_PU_NEED_WAIT (DISP_SLOT_PU_STATUS + 0x4)
+#define DISP_SLOT_READ_DDIC_BASE (DISP_SLOT_PU_NEED_WAIT + 0x4)
 #define DISP_SLOT_READ_DDIC_BASE_END		\
 	(DISP_SLOT_READ_DDIC_BASE + READ_DDIC_SLOT_NUM * 0x4)
 #define DISP_SLOT_OVL_DSI_SEQ (DISP_SLOT_READ_DDIC_BASE_END)
@@ -528,6 +541,15 @@ enum MTK_CRTC_PROP {
 	CRTC_PROP_BL_SYNC_GAMMA_GAIN,
 	CRTC_PROP_DYNAMIC_WCG_OFF,
 	CRTC_PROP_WCG_BY_COLOR_MODE,
+#ifdef OPLUS_FEATURE_DISPLAY_ADFR
+	CRTC_PROP_AUTO_MODE,
+	CRTC_PROP_AUTO_FAKE_FRAME,
+	CRTC_PROP_AUTO_MIN_FPS,
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+/* #ifdef OPLUS_FEATURE_LOCAL_HDR  */
+	CRTC_PROP_HW_BRIGHTNESS,
+	CRTC_PROP_BRIGHTNESS_NEED_SYNC,
+/* #endif */
 	CRTC_PROP_STYLUS,
 	CRTC_PROP_MAX,
 };
@@ -603,6 +625,7 @@ enum MTK_CRTC_COLOR_FMT {
 	EXPR(CLIENT_TRIG_LOOP)                                                 \
 	EXPR(CLIENT_SODI_LOOP)                                                 \
 	EXPR(CLIENT_EVENT_LOOP)                                                 \
+	EXPR(CLIENT_CHECK_T)                                                   \
 	EXPR(CLIENT_SUB_CFG)                                                   \
 	EXPR(CLIENT_DSI_CFG)                                                   \
 	EXPR(CLIENT_SEC_CFG)                                                   \
@@ -626,6 +649,7 @@ enum CRTC_GCE_EVENT_TYPE {
 	EVENT_WDMA1_EOF,
 	EVENT_STREAM_BLOCK,
 	EVENT_CABC_EOF,
+	EVENT_VDO_CABC_EOF,
 	EVENT_DSI_SOF,
 	/*Msync 2.0*/
 	EVENT_SYNC_TOKEN_VFP_PERIOD,
@@ -651,6 +675,7 @@ enum CRTC_GCE_EVENT_TYPE {
 	EVENT_UFBC_WDMA3_EOF,
 	EVENT_OVLSYS_UFBC_WDMA0_EOF,
 	EVENT_MUTEX0_SOF,
+	EVENT_WDMA4_EOF,
 	EVENT_TYPE_MAX,
 };
 
@@ -1153,9 +1178,11 @@ struct mtk_drm_crtc {
 	struct task_struct *cwb_task;
 	wait_queue_head_t cwb_wq;
 	atomic_t cwb_task_active;
+	int last_wb_scn;
 
 	ktime_t pf_time;
 	ktime_t sof_time;
+	ktime_t prev_pf_time;
 	spinlock_t pf_time_lock;
 	struct task_struct *signal_present_fece_task;
 	struct cmdq_cb_data cb_data;
@@ -1180,6 +1207,7 @@ struct mtk_drm_crtc {
 	wait_queue_head_t signal_mml_last_job_is_flushed_wq;
 	bool is_mml;
 	bool is_mml_dl;
+	bool is_mml_submit;
 	bool skip_check_trigger;
 	bool is_mml_dc;
 	unsigned int mml_debug;
@@ -1197,6 +1225,9 @@ struct mtk_drm_crtc {
 
 	atomic_t force_high_step;
 	int force_high_enabled;
+#ifdef OPLUS_FEATURE_DISPLAY_APOLLO
+	struct oplus_apollo_brightness *oplus_apollo_br;
+#endif /* OPLUS_FEATURE_DISPLAY_APOLLO */
 	struct total_tile_overhead tile_overhead;
 	struct total_tile_overhead_v tile_overhead_v;
 
@@ -1216,6 +1247,7 @@ struct mtk_drm_crtc {
 	bool is_dsc_output_swap;
 
 	bool capturing;
+	bool recovery_flg;
 
 	int dli_relay_1tnp;
 
@@ -1234,6 +1266,7 @@ struct mtk_drm_crtc {
 
 	unsigned int usage_ovl_fmt[MAX_LAYER_NR]; // for mt6989 hrt by larb
 	unsigned int usage_ovl_compr[MAX_LAYER_NR];
+	struct mtk_rect usage_ovl_roi[MAX_LAYER_NR];
 	unsigned int usage_ovl_ext_compr[MAX_LAYER_NR * OVL_EXT_LYE_NUM]; // for mt6899 port bw report
 
 	struct mtk_ddp_comp *last_blender;
@@ -1298,6 +1331,7 @@ struct mtk_crtc_state {
 	/* property */
 	uint64_t prop_val[CRTC_PROP_MAX];
 	bool doze_changed;
+	bool disp_mode_changed;
 };
 
 struct mtk_cmdq_cb_data {
@@ -1541,7 +1575,7 @@ dma_addr_t mtk_get_gce_backup_slot_pa(struct mtk_drm_crtc *mtk_crtc,
 unsigned int mtk_get_plane_slot_idx(struct mtk_drm_crtc *mtk_crtc, unsigned int idx);
 void mtk_gce_backup_slot_init(struct mtk_drm_crtc *mtk_crtc);
 
-u16 mtk_get_gpr(struct mtk_drm_crtc *mtk_crtc, struct cmdq_pkt *handle);
+u16 mtk_get_gpr(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle);
 
 void mtk_crtc_mml_racing_resubmit(struct drm_crtc *crtc, struct cmdq_pkt *_cmdq_handle);
 void mtk_crtc_mml_racing_stop_sync(struct drm_crtc *crtc, struct cmdq_pkt *_cmdq_handle,
@@ -1631,6 +1665,11 @@ void mtk_crtc_exec_atf_prebuilt_instr(struct mtk_drm_crtc *mtk_crtc,
 
 unsigned int mtk_get_cur_spr_type(struct drm_crtc *crtc);
 
+#ifdef OPLUS_FEATURE_DISPLAY_APOLLO
+extern int mtk_drm_setbacklight_without_lock(struct drm_crtc *crtc, unsigned int level,
+			unsigned int panel_ext_param, unsigned int cfg_flag);
+#endif /* OPLUS_FEATURE_DISPLAY_APOLLO */
+
 int mtk_drm_switch_spr(struct drm_crtc *crtc, unsigned int en, unsigned int need_lock);
 
 int mtk_vblank_config_rec_init(struct drm_crtc *crtc);
@@ -1660,6 +1699,24 @@ void mtk_drm_crtc_exdma_path_setting_reset_without_cmdq(struct mtk_drm_crtc *mtk
 
 void mtk_crtc_gce_event_config(struct drm_crtc *crtc);
 void mtk_crtc_vdisp_ao_config(struct drm_crtc *crtc);
+
+#ifdef OPLUS_FEATURE_DISPLAY
+void mtk_drm_send_lcm_cmd_prepare(struct drm_crtc *crtc,
+  	struct cmdq_pkt **cmdq_handle);
+void mtk_drm_send_lcm_cmd_flush(struct drm_crtc *crtc,
+  	struct cmdq_pkt **cmdq_handle, bool sync);
+bool mtk_crtc_is_event_loop_active(struct mtk_drm_crtc *mtk_crtc);
+#endif /* OPLUS_FEATURE_DISPLAY */
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+void mtk_atomic_hbm_bypass_pq(struct drm_crtc *crtc,
+		struct cmdq_pkt *handle, int en);
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
+
+#if IS_ENABLED(CONFIG_DRM_MEDIATEK_AUTO_YCT)
+struct mtk_ddp_comp *mtk_crtc_get_comp_with_index(struct mtk_drm_crtc *mtk_crtc,
+						  struct mtk_plane_state *plane_state);
+#endif
 void mml_cmdq_pkt_init(struct drm_crtc *crtc, struct cmdq_pkt *cmdq_handle);
 struct mtk_ddp_comp *mtk_disp_get_wdma_comp_by_scn(struct drm_crtc *crtc, enum addon_scenario scn);
 
